@@ -6,11 +6,8 @@ An LLM-assisted AppSec helper that may **propose** findings but may only **promo
 
 ## Supervision and industry
 
-| Role | Name |
-|---|---|
-| Principal supervisor | Dr. Ali Hur |
-| Co-supervisor | Miss Taylah Griffiths |
-| Industry partner | Secure.com (mentoring and design-review feedback only) |
+**Supervisors:** Dr. Ali Hur, Miss Taylah Griffiths  
+**Industry partner:** Secure.com (mentoring and design-review feedback only)
 
 Industry partners advise. They are not requesting a proprietary product build. Student deliverables are intended for release under the **MIT License**.
 
