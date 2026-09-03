@@ -35,3 +35,7 @@ Thumbs.db
 *.db
 *.sqlite3
 .neo4j/
+
+# Generated evidence / local test runs
+artifacts/
+
