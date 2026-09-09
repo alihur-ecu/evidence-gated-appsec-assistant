@@ -1,0 +1,324 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #07111f;
+    color: #e8eef8;
+}
+
+.app-shell {
+    min-height: 100vh;
+    display: flex;
+}
+
+.sidebar {
+    width: 230px;
+    background: #081627;
+    border-right: 1px solid #17314f;
+    padding: 28px 18px;
+}
+
+.brand h2 {
+    margin: 0;
+    font-size: 19px;
+}
+
+.brand p {
+    margin-top: 4px;
+    color: #8ca6c5;
+    font-size: 13px;
+}
+
+nav {
+    margin-top: 42px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+nav a {
+    color: #91a9c6;
+    text-decoration: none;
+    padding: 12px 14px;
+    border-radius: 8px;
+}
+
+nav a:hover,
+nav a.active {
+    background: #102846;
+    color: #ffffff;
+}
+
+.main-content {
+    flex: 1;
+    padding: 0 34px 40px;
+}
+
+.topbar {
+    height: 80px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #17314f;
+}
+
+.label {
+    color: #7f99b8;
+    margin-right: 10px;
+}
+
+.status-pill {
+    padding: 10px 16px;
+    border-radius: 20px;
+    border: 1px solid #234b73;
+    background: #0d2036;
+}
+
+.finding-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    padding: 30px 0 22px;
+}
+
+.breadcrumb {
+    color: #6484a7;
+    font-size: 13px;
+}
+
+h1 {
+    margin: 8px 0 0;
+    font-size: 30px;
+}
+
+.finding-meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.risk-pill {
+    padding: 7px 13px;
+    border-radius: 8px;
+    background: #352510;
+    border: 1px solid #805819;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+
+.summary-card,
+.panel {
+    background: #0c1c30;
+    border: 1px solid #173b60;
+    border-radius: 12px;
+}
+
+.summary-card {
+    padding: 17px;
+}
+
+.summary-card span,
+.finding-details span {
+    display: block;
+    color: #7894b3;
+    font-size: 12px;
+    margin-bottom: 7px;
+}
+
+.workflow {
+    display: flex;
+    align-items: center;
+    margin: 34px 0;
+}
+
+.workflow-step {
+    width: 170px;
+    text-align: center;
+}
+
+.workflow-step strong,
+.workflow-step span {
+    display: block;
+}
+
+.workflow-step span {
+    margin-top: 5px;
+    color: #7894b3;
+    font-size: 12px;
+}
+
+.workflow-icon {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto 10px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    border: 2px solid #365878;
+}
+
+.workflow-step.complete .workflow-icon {
+    border-color: #1fc7b6;
+}
+
+.workflow-line {
+    flex: 1;
+    height: 1px;
+    background: #31506f;
+}
+
+.content-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 18px;
+}
+
+.panel {
+    padding: 20px;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.panel-header h3 {
+    margin: 0;
+}
+
+.status {
+    padding: 6px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+}
+
+.proposed {
+    background: #251e54;
+    border: 1px solid #5144a7;
+}
+
+.pending-status {
+    background: #232f3b;
+    border: 1px solid #3e5267;
+}
+
+.risk-high {
+    background: #39250d;
+    border: 1px solid #9a681f;
+}
+
+.finding-details {
+    margin-top: 22px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.finding-details div {
+    padding: 12px;
+    background: #091625;
+    border-radius: 8px;
+}
+
+.empty-state {
+    padding: 30px;
+    background: #091625;
+    border-radius: 10px;
+    text-align: center;
+}
+
+.empty-state p {
+    color: #7994b0;
+    max-width: 500px;
+    margin: 12px auto 20px;
+}
+
+button {
+    padding: 11px 18px;
+    border-radius: 8px;
+    border: 1px solid #38546f;
+    background: #15273a;
+    color: #76899d;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.risk-section {
+    margin-top: 18px;
+}
+
+.risk-matrix {
+    display: grid;
+    grid-template-columns: 160px repeat(3, 1fr);
+    gap: 5px;
+    margin-top: 20px;
+}
+
+.risk-matrix > div {
+    padding: 14px;
+    text-align: center;
+}
+
+.risk-cell {
+    border-radius: 6px;
+    background: #11263d;
+}
+
+.risk-note {
+    color: #7894b3;
+    font-size: 12px;
+    margin-top: 18px;
+}
+
+.review-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.reject-button {
+    border-color: #7b3342;
+}
+
+.accept-button {
+    border-color: #24686c;
+}
+
+@media (max-width: 1000px) {
+
+    .sidebar {
+        display: none;
+    }
+
+    .summary-grid,
+    .content-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .workflow {
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+
+    .workflow-line {
+        display: none;
+    }
+
+    .risk-matrix {
+        font-size: 11px;
+        grid-template-columns: 120px repeat(3, 1fr);
+    }
+}

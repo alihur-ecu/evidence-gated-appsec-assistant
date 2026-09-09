@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Evidence-Gated AppSec Finding Assistant</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/app.css') }}"
+    >
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside class="sidebar">
+        <div class="brand">
+            <h2>Evidence-Gated</h2>
+            <p>AppSec Finding Assistant</p>
+        </div>
+
+        <nav>
+            <a href="#">Dashboard</a>
+            <a href="#" class="active">Findings</a>
+            <a href="#">Targets</a>
+            <a href="#">Evidence Store</a>
+            <a href="#">Risk Overview</a>
+            <a href="#">Reports</a>
+            <a href="#">Settings</a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+
+        <header class="topbar">
+            <div>
+                <span class="label">Target</span>
+                <strong>DVWA Test Environment</strong>
+            </div>
+
+            <div class="status-pill">
+                Analysis Ready
+            </div>
+        </header>
+
+        <section class="finding-header">
+
+            <div>
+                <p class="breadcrumb">
+                    Findings / Finding Details
+                </p>
+
+                <h1>
+                    {{ finding.finding_type }}
+                </h1>
+            </div>
+
+            <div class="finding-meta">
+                <span>{{ finding.finding_id }}</span>
+                <span class="risk-pill">
+                    {{ finding.risk }}
+                </span>
+            </div>
+
+        </section>
+
+        <section class="summary-grid">
+
+            <div class="summary-card">
+                <span>Source File</span>
+                <strong>{{ finding.source_file }}</strong>
+            </div>
+
+            <div class="summary-card">
+                <span>Parameter</span>
+                <strong>{{ finding.parameter }}</strong>
+            </div>
+
+            <div class="summary-card">
+                <span>CWE</span>
+                <strong>{{ finding.cwe }}</strong>
+            </div>
+
+            <div class="summary-card">
+                <span>Status</span>
+                <strong>{{ finding.llm_status }}</strong>
+            </div>
+
+        </section>
+
+        <section class="workflow">
+
+            <div class="workflow-step complete">
+                <div class="workflow-icon">1</div>
+                <strong>LLM Proposal</strong>
+                <span>Proposed finding</span>
+            </div>
+
+            <div class="workflow-line"></div>
+
+            <div class="workflow-step pending">
+                <div class="workflow-icon">2</div>
+                <strong>Dynamic Verification</strong>
+                <span>Pending</span>
+            </div>
+
+            <div class="workflow-line"></div>
+
+            <div class="workflow-step pending">
+                <div class="workflow-icon">3</div>
+                <strong>Human Review</strong>
+                <span>Pending decision</span>
+            </div>
+
+            <div class="workflow-line"></div>
+
+            <div class="workflow-step pending">
+                <div class="workflow-icon">4</div>
+                <strong>Security Report</strong>
+                <span>Not generated</span>
+            </div>
+
+        </section>
+
+        <section class="content-grid">
+
+            <article class="panel">
+                <div class="panel-header">
+                    <h3>LLM Finding</h3>
+                    <span class="status proposed">
+                        {{ finding.llm_status }}
+                    </span>
+                </div>
+
+                <p>
+                    {{ finding.reason }}
+                </p>
+
+                <div class="finding-details">
+                    <div>
+                        <span>Vulnerability</span>
+                        <strong>SQL Injection</strong>
+                    </div>
+
+                    <div>
+                        <span>Parameter</span>
+                        <strong>{{ finding.parameter }}</strong>
+                    </div>
+
+                    <div>
+                        <span>CWE</span>
+                        <strong>{{ finding.cwe }}</strong>
+                    </div>
+                </div>
+            </article>
+
+            <article class="panel evidence-panel">
+
+                <div class="panel-header">
+                    <h3>Evidence Gate</h3>
+
+                    <span class="status pending-status">
+                        {{ finding.verification_status }}
+                    </span>
+                </div>
+
+                <div class="empty-state">
+                    <h4>Dynamic verification has not been executed yet.</h4>
+
+                    <p>
+                        Evidence collected by the deterministic verifier
+                        will appear here once the verification stage is available.
+                    </p>
+
+                    <button disabled>
+                        Run Verification
+                    </button>
+                </div>
+
+            </article>
+
+        </section>
+
+        <section class="risk-section">
+
+            <article class="panel">
+                <div class="panel-header">
+                    <h3>Risk Overview</h3>
+                    <span class="status risk-high">HIGH</span>
+                </div>
+
+                <div class="risk-matrix">
+
+                    <div></div>
+                    <div>Low Impact</div>
+                    <div>Medium Impact</div>
+                    <div>High Impact</div>
+
+                    <div>High Likelihood</div>
+                    <div class="risk-cell medium">Medium</div>
+                    <div class="risk-cell high">High</div>
+                    <div class="risk-cell critical">Critical</div>
+
+                    <div>Medium Likelihood</div>
+                    <div class="risk-cell low">Low</div>
+                    <div class="risk-cell medium">Medium</div>
+                    <div class="risk-cell high">High</div>
+
+                    <div>Low Likelihood</div>
+                    <div class="risk-cell low">Low</div>
+                    <div class="risk-cell low">Low</div>
+                    <div class="risk-cell medium">Medium</div>
+
+                </div>
+
+                <p class="risk-note">
+                    Risk scoring is currently demonstration data and will be
+                    connected to the project risk methodology later.
+                </p>
+
+            </article>
+
+        </section>
+
+        <section class="review-actions">
+
+            <button class="reject-button" disabled>
+                Reject Finding
+            </button>
+
+            <button class="accept-button" disabled>
+                Accept Finding
+            </button>
+
+        </section>
+
+    </main>
+
+</div>
+
+</body>
+</html>
