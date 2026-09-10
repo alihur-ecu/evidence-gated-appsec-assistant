@@ -1,245 +1,1538 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% extends "base.html" %}
 
-    <title>Evidence-Gated AppSec Finding Assistant</title>
 
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', filename='css/app.css') }}"
-    >
-</head>
+{% block title %}
+Finding Details | Evidence-Gated AppSec Finding Assistant
+{% endblock %}
 
-<body>
 
-<div class="app-shell">
+{% block current_focus %}
+{{ finding.finding_type }}
+{% endblock %}
 
-    <aside class="sidebar">
-        <div class="brand">
-            <h2>Evidence-Gated</h2>
-            <p>AppSec Finding Assistant</p>
+
+{% block target_selector %}
+
+<strong>
+    {{ finding.target }}
+</strong>
+
+{% endblock %}
+
+
+{% block top_status %}
+
+{% if finding.verification_status == "COMPLETED" %}
+
+Verification Complete
+
+{% else %}
+
+Finding Proposed
+
+{% endif %}
+
+{% endblock %}
+
+
+{% block content %}
+
+
+<div class="page-layout">
+
+
+    <!-- ==========================================================
+         MAIN COLUMN
+         ========================================================== -->
+
+    <section class="main-column">
+
+
+        <div class="breadcrumb">
+
+            <a
+                href="{{ url_for('findings_list') }}"
+                style="
+                    color: inherit;
+                    text-decoration: none;
+                "
+            >
+                Findings
+            </a>
+
+            / Finding Details
+
         </div>
 
-        <nav>
-            <a href="#">Dashboard</a>
-            <a href="#" class="active">Findings</a>
-            <a href="#">Targets</a>
-            <a href="#">Evidence Store</a>
-            <a href="#">Risk Overview</a>
-            <a href="#">Reports</a>
-            <a href="#">Settings</a>
-        </nav>
-    </aside>
 
-    <main class="main-content">
+        <!-- ======================================================
+             TITLE
+             ====================================================== -->
 
-        <header class="topbar">
-            <div>
-                <span class="label">Target</span>
-                <strong>DVWA Test Environment</strong>
-            </div>
+        <section class="finding-title-row">
 
-            <div class="status-pill">
-                Analysis Ready
-            </div>
-        </header>
-
-        <section class="finding-header">
 
             <div>
-                <p class="breadcrumb">
-                    Findings / Finding Details
-                </p>
 
                 <h1>
                     {{ finding.finding_type }}
                 </h1>
+
             </div>
+
 
             <div class="finding-meta">
-                <span>{{ finding.finding_id }}</span>
-                <span class="risk-pill">
-                    {{ finding.risk }}
+
+
+                <span class="finding-id">
+
+                    {{ finding.finding_id }}
+
                 </span>
+
+
+                <span class="risk-pill">
+
+                    Suggested:
+                    {{ finding.suggested_severity }}
+
+                </span>
+
+
             </div>
 
+
         </section>
+
+
+        <!-- ======================================================
+             PRELOADED PROPOSAL WARNING
+             ====================================================== -->
+
+        {% if finding.proposal_source == "PRELOADED" %}
+
+        <div
+            style="
+                margin-top: 18px;
+                padding: 11px 14px;
+                border: 1px solid #735d2c;
+                border-radius: 8px;
+                background: #231f13;
+                color: #cdbd83;
+                font-size: 12px;
+                line-height: 1.5;
+            "
+        >
+
+            <strong>Development note:</strong>
+
+            this candidate Finding is currently preloaded so the
+            downstream verification pipeline can be developed and
+            tested. The live LLM proposer is not connected to this
+            web application yet.
+
+        </div>
+
+        {% endif %}
+
+
+        <!-- ======================================================
+             SUMMARY
+             ====================================================== -->
 
         <section class="summary-grid">
 
-            <div class="summary-card">
-                <span>Source File</span>
-                <strong>{{ finding.source_file }}</strong>
-            </div>
 
             <div class="summary-card">
-                <span>Parameter</span>
-                <strong>{{ finding.parameter }}</strong>
+
+                <span>
+                    Endpoint
+                </span>
+
+                <strong>
+                    {{ finding.endpoint }}
+                </strong>
+
             </div>
 
-            <div class="summary-card">
-                <span>CWE</span>
-                <strong>{{ finding.cwe }}</strong>
-            </div>
 
             <div class="summary-card">
-                <span>Status</span>
-                <strong>{{ finding.llm_status }}</strong>
+
+                <span>
+                    Parameter
+                </span>
+
+                <strong>
+                    {{ finding.parameter }}
+                </strong>
+
             </div>
+
+
+            <div class="summary-card">
+
+                <span>
+                    Proposed CWE
+                </span>
+
+                <strong>
+                    {{ finding.proposed_cwe }}
+                </strong>
+
+            </div>
+
+
+            <div class="summary-card">
+
+                <span>
+                    Gate Status
+                </span>
+
+                <strong>
+                    {{ finding.evidence_gate_result }}
+                </strong>
+
+            </div>
+
 
         </section>
+
+
+        <!-- ======================================================
+             WORKFLOW
+             ====================================================== -->
 
         <section class="workflow">
 
-            <div class="workflow-step complete">
-                <div class="workflow-icon">1</div>
-                <strong>LLM Proposal</strong>
-                <span>Proposed finding</span>
+
+            <!-- STEP 1 -->
+
+            <div class="workflow-step active">
+
+                <div class="workflow-circle">
+                    1
+                </div>
+
+                <strong>
+                    Proposal
+                </strong>
+
+                <span>
+                    {{ finding.llm_status }}
+                </span>
+
             </div>
+
+
+            <div
+                class="
+                    workflow-line
+                    {% if finding.verification_status == 'COMPLETED' %}
+                    active-line
+                    {% endif %}
+                "
+            ></div>
+
+
+            <!-- STEP 2 -->
+
+            <div
+                class="
+                    workflow-step
+                    {% if finding.verification_status == 'COMPLETED' %}
+                    active
+                    {% endif %}
+                "
+            >
+
+                <div class="workflow-circle">
+                    2
+                </div>
+
+                <strong>
+                    Dynamic Verification
+                </strong>
+
+                <span>
+
+                    {{ finding.verification_status }}
+
+                </span>
+
+            </div>
+
+
+            <div
+                class="
+                    workflow-line
+                    {% if finding.human_decision %}
+                    active-line
+                    {% endif %}
+                "
+            ></div>
+
+
+            <!-- STEP 3 -->
+
+            <div
+                class="
+                    workflow-step
+                    {% if finding.human_decision %}
+                    active
+                    {% endif %}
+                "
+            >
+
+                <div class="workflow-circle">
+                    3
+                </div>
+
+                <strong>
+                    Human Review
+                </strong>
+
+                <span>
+
+                    {% if finding.human_decision %}
+
+                    {{ finding.human_decision }}
+
+                    {% elif finding.verification_status == "COMPLETED" %}
+
+                    READY
+
+                    {% else %}
+
+                    PENDING
+
+                    {% endif %}
+
+                </span>
+
+            </div>
+
 
             <div class="workflow-line"></div>
 
-            <div class="workflow-step pending">
-                <div class="workflow-icon">2</div>
-                <strong>Dynamic Verification</strong>
-                <span>Pending</span>
+
+            <!-- STEP 4 -->
+
+            <div class="workflow-step">
+
+                <div class="workflow-circle">
+                    4
+                </div>
+
+                <strong>
+                    Security Report
+                </strong>
+
+                <span>
+                    Not generated
+                </span>
+
             </div>
 
-            <div class="workflow-line"></div>
-
-            <div class="workflow-step pending">
-                <div class="workflow-icon">3</div>
-                <strong>Human Review</strong>
-                <span>Pending decision</span>
-            </div>
-
-            <div class="workflow-line"></div>
-
-            <div class="workflow-step pending">
-                <div class="workflow-icon">4</div>
-                <strong>Security Report</strong>
-                <span>Not generated</span>
-            </div>
 
         </section>
 
-        <section class="content-grid">
 
-            <article class="panel">
+        <!-- ======================================================
+             LLM + EVIDENCE
+             ====================================================== -->
+
+        <section class="analysis-grid">
+
+
+            <!-- ==================================================
+                 PROPOSAL
+                 ================================================== -->
+
+            <article class="panel llm-panel">
+
+
                 <div class="panel-header">
-                    <h3>LLM Finding</h3>
+
+                    <div>
+
+                        <h3>
+                            Proposed Finding
+                        </h3>
+
+                        <p>
+                            Candidate only — not proof.
+                        </p>
+
+                    </div>
+
+
                     <span class="status proposed">
+
                         {{ finding.llm_status }}
+
                     </span>
+
                 </div>
 
-                <p>
+
+                <div class="analysis-box">
+
                     {{ finding.reason }}
-                </p>
 
-                <div class="finding-details">
-                    <div>
-                        <span>Vulnerability</span>
-                        <strong>SQL Injection</strong>
-                    </div>
-
-                    <div>
-                        <span>Parameter</span>
-                        <strong>{{ finding.parameter }}</strong>
-                    </div>
-
-                    <div>
-                        <span>CWE</span>
-                        <strong>{{ finding.cwe }}</strong>
-                    </div>
                 </div>
+
+
+                <div class="analysis-list">
+
+                    <div>
+                        ✓ Vulnerability class:
+                        {{ finding.finding_type }}
+                    </div>
+
+                    <div>
+                        ✓ Parameter:
+                        {{ finding.parameter }}
+                    </div>
+
+                    <div>
+                        ✓ Proposed CWE:
+                        {{ finding.proposed_cwe }}
+                    </div>
+
+                    <div>
+                        ✓ Method:
+                        {{ finding.method }}
+                    </div>
+
+                </div>
+
+
+                <div class="detail-cards">
+
+
+                    <div>
+
+                        <span>
+                            Endpoint
+                        </span>
+
+                        <strong>
+                            {{ finding.endpoint }}
+                        </strong>
+
+                    </div>
+
+
+                    <div>
+
+                        <span>
+                            Target
+                        </span>
+
+                        <strong>
+                            {{ finding.target }}
+                        </strong>
+
+                    </div>
+
+
+                    <div>
+
+                        <span>
+                            Proposal Source
+                        </span>
+
+                        <strong>
+                            {{ finding.proposal_source }}
+                        </strong>
+
+                    </div>
+
+
+                </div>
+
+
             </article>
+
+
+            <!-- ==================================================
+                 VERIFICATION EVIDENCE
+                 ================================================== -->
 
             <article class="panel evidence-panel">
 
+
                 <div class="panel-header">
-                    <h3>Evidence Gate</h3>
+
+
+                    <div>
+
+                        <h3>
+                            Deterministic Verification
+                        </h3>
+
+                        <p>
+                            Independent runtime evidence
+                        </p>
+
+                    </div>
+
 
                     <span class="status pending-status">
+
                         {{ finding.verification_status }}
+
                     </span>
+
+
                 </div>
 
-                <div class="empty-state">
-                    <h4>Dynamic verification has not been executed yet.</h4>
+
+                <!-- ==============================================
+                     BEFORE VERIFICATION
+                     ============================================== -->
+
+                {% if finding.verification_status != "COMPLETED" %}
+
+
+                <div class="pending-evidence">
+
+
+                    {% if finding.verification_supported %}
+
+
+                    <h4>
+                        Verification has not been executed yet.
+                    </h4>
+
 
                     <p>
-                        Evidence collected by the deterministic verifier
-                        will appear here once the verification stage is available.
+
+                        The verifier will authenticate to the local
+                        DVWA lab and perform a baseline request,
+                        TRUE-condition request and FALSE-condition
+                        request.
+
                     </p>
 
-                    <button disabled>
+
+                    <div class="placeholder-block">
+
+                        Baseline
+
+                        <span>
+                            Waiting for verification
+                        </span>
+
+                    </div>
+
+
+                    <div class="placeholder-block">
+
+                        TRUE-condition test
+
+                        <span>
+                            Waiting for verification
+                        </span>
+
+                    </div>
+
+
+                    <div class="placeholder-block">
+
+                        FALSE-condition test
+
+                        <span>
+                            Waiting for verification
+                        </span>
+
+                    </div>
+
+
+                    <button
+                        id="runVerificationButton"
+                        class="accept-button"
+                        style="
+                            margin-top: 16px;
+                            padding: 11px 16px;
+                            border-radius: 8px;
+                            background: #102233;
+                            cursor: pointer;
+                        "
+                    >
                         Run Verification
                     </button>
+
+
+                    <p
+                        id="verificationMessage"
+                        class="risk-note"
+                    ></p>
+
+
+                    {% else %}
+
+
+                    <h4>
+                        Verifier not implemented for this finding type.
+                    </h4>
+
+
+                    <p>
+
+                        The current MVP verifier supports SQL Injection
+                        only. This finding remains PROPOSED.
+
+                    </p>
+
+
+                    <button
+                        disabled
+                        class="disabled-action"
+                    >
+                        Verification unavailable
+                    </button>
+
+
+                    {% endif %}
+
+
                 </div>
+
+
+                <!-- ==============================================
+                     AFTER VERIFICATION
+                     ============================================== -->
+
+                {% else %}
+
+
+                <div
+                    style="
+                        margin-bottom: 16px;
+                        padding: 14px;
+                        border: 1px solid #1b4b66;
+                        border-radius: 9px;
+                        background: #071a2a;
+                    "
+                >
+
+
+                    <span
+                        style="
+                            display: block;
+                            color: #6ba7d4;
+                            font-size: 12px;
+                            margin-bottom: 7px;
+                        "
+                    >
+                        EVIDENCE GATE RESULT
+                    </span>
+
+
+                    <strong
+                        style="
+                            font-size: 18px;
+                        "
+                    >
+
+                        {{ finding.evidence_gate_result }}
+
+                    </strong>
+
+
+                    {% if finding.evidence_summary %}
+
+                    <p
+                        style="
+                            color: #9eb5ca;
+                            line-height: 1.5;
+                        "
+                    >
+
+                        {{ finding.evidence_summary }}
+
+                    </p>
+
+                    {% endif %}
+
+
+                    {% if finding.run_id %}
+
+                    <small
+                        style="
+                            display: block;
+                            color: #66859f;
+                        "
+                    >
+
+                        Run ID:
+                        {{ finding.run_id }}
+
+                    </small>
+
+                    {% endif %}
+
+
+                </div>
+
+
+                <!-- ==============================================
+                     SIGNALS
+                     ============================================== -->
+
+                <div
+                    class="detail-cards"
+                    style="
+                        margin-bottom: 16px;
+                    "
+                >
+
+
+                    <div>
+
+                        <span>
+                            Baseline Records
+                        </span>
+
+                        <strong>
+                            {{ finding.signals.baseline_result_count }}
+                        </strong>
+
+                    </div>
+
+
+                    <div>
+
+                        <span>
+                            TRUE Records
+                        </span>
+
+                        <strong>
+                            {{ finding.signals.true_result_count }}
+                        </strong>
+
+                    </div>
+
+
+                    <div>
+
+                        <span>
+                            FALSE Records
+                        </span>
+
+                        <strong>
+                            {{ finding.signals.false_result_count }}
+                        </strong>
+
+                    </div>
+
+
+                </div>
+
+
+                <!-- ==============================================
+                     INDIVIDUAL TESTS
+                     ============================================== -->
+
+                {% for test in finding.evidence %}
+
+
+                <div
+                    style="
+                        margin-top: 14px;
+                        border: 1px solid #1a4468;
+                        border-radius: 9px;
+                        overflow: hidden;
+                    "
+                >
+
+
+                    <div
+                        style="
+                            padding: 12px 14px;
+                            background: #0a2032;
+                            border-bottom: 1px solid #173b54;
+                        "
+                    >
+
+                        <small
+                            style="
+                                color: #66b8ed;
+                            "
+                        >
+
+                            {{ test.test_id }}
+
+                        </small>
+
+
+                        <strong
+                            style="
+                                display: block;
+                                margin-top: 4px;
+                            "
+                        >
+
+                            {{ test.name }}
+
+                        </strong>
+
+                    </div>
+
+
+                    <div
+                        style="
+                            padding: 14px;
+                        "
+                    >
+
+
+                        <span
+                            style="
+                                display: block;
+                                color: #7295b7;
+                                font-size: 12px;
+                                margin-bottom: 6px;
+                            "
+                        >
+                            Payload
+                        </span>
+
+
+                        <pre
+                            style="
+                                white-space: pre-wrap;
+                                word-break: break-word;
+                                padding: 10px;
+                                background: #04111d;
+                                border-radius: 7px;
+                                overflow-x: auto;
+                            "
+                        >{{ test.payload }}</pre>
+
+
+                        <span
+                            style="
+                                display: block;
+                                color: #7295b7;
+                                font-size: 12px;
+                                margin: 12px 0 6px;
+                            "
+                        >
+                            Request
+                        </span>
+
+
+                        <pre
+                            style="
+                                white-space: pre-wrap;
+                                word-break: break-word;
+                                padding: 10px;
+                                background: #04111d;
+                                border-radius: 7px;
+                                overflow-x: auto;
+                            "
+                        >{{ test.request }}</pre>
+
+
+                        <span
+                            style="
+                                display: block;
+                                color: #7295b7;
+                                font-size: 12px;
+                                margin: 12px 0 6px;
+                            "
+                        >
+                            Response Evidence
+                        </span>
+
+
+                        <pre
+                            style="
+                                max-height: 260px;
+                                overflow: auto;
+                                white-space: pre-wrap;
+                                word-break: break-word;
+                                padding: 10px;
+                                background: #04111d;
+                                border-radius: 7px;
+                            "
+                        >{{ test.response }}</pre>
+
+
+                    </div>
+
+
+                </div>
+
+
+                {% endfor %}
+
+
+                <button
+                    id="runVerificationButton"
+                    class="review-button"
+                    style="
+                        margin-top: 16px;
+                        padding: 10px 14px;
+                        border-radius: 8px;
+                        background: #102233;
+                        cursor: pointer;
+                    "
+                >
+                    Run Verification Again
+                </button>
+
+
+                <p
+                    id="verificationMessage"
+                    class="risk-note"
+                ></p>
+
+
+                {% endif %}
+
 
             </article>
 
+
         </section>
 
-        <section class="risk-section">
+
+        <!-- ======================================================
+             GATE + REVIEW ASSESSMENT
+             ====================================================== -->
+
+        <section class="lower-grid">
+
+
+            <!-- EVIDENCE GATE -->
 
             <article class="panel">
+
+
                 <div class="panel-header">
-                    <h3>Risk Overview</h3>
-                    <span class="status risk-high">HIGH</span>
-                </div>
 
-                <div class="risk-matrix">
 
-                    <div></div>
-                    <div>Low Impact</div>
-                    <div>Medium Impact</div>
-                    <div>High Impact</div>
+                    <div>
 
-                    <div>High Likelihood</div>
-                    <div class="risk-cell medium">Medium</div>
-                    <div class="risk-cell high">High</div>
-                    <div class="risk-cell critical">Critical</div>
+                        <h3>
+                            Evidence Gate
+                        </h3>
 
-                    <div>Medium Likelihood</div>
-                    <div class="risk-cell low">Low</div>
-                    <div class="risk-cell medium">Medium</div>
-                    <div class="risk-cell high">High</div>
+                        <p>
+                            Deterministic result — not human decision.
+                        </p>
 
-                    <div>Low Likelihood</div>
-                    <div class="risk-cell low">Low</div>
-                    <div class="risk-cell low">Low</div>
-                    <div class="risk-cell medium">Medium</div>
+                    </div>
+
+
+                    <span class="status pending-status">
+
+                        {{ finding.evidence_gate_result }}
+
+                    </span>
+
 
                 </div>
+
+
+                {% if finding.verification_status == "COMPLETED" %}
+
+
+                <p class="muted">
+
+                    Independent verification completed.
+
+                    The Evidence Gate classified this proposed finding as
+
+                    <strong>
+                        {{ finding.evidence_gate_result }}
+                    </strong>.
+
+                </p>
+
 
                 <p class="risk-note">
-                    Risk scoring is currently demonstration data and will be
-                    connected to the project risk methodology later.
+
+                    Database error observed:
+                    {{ finding.signals.database_error_detected }}
+
+                    <br>
+
+                    Behaviour changed:
+                    {{ finding.signals.behaviour_changed }}
+
+                    <br>
+
+                    TRUE/FALSE difference:
+                    {{ finding.signals.true_false_difference }}
+
                 </p>
+
+
+                {% else %}
+
+
+                <p class="muted">
+
+                    No deterministic verification result is available.
+                    The finding remains only a proposed candidate.
+
+                </p>
+
+
+                {% endif %}
+
 
             </article>
 
+
+            <!-- REVIEWER ASSESSMENT -->
+
+            <article class="panel reviewer-panel">
+
+
+                <div class="panel-header">
+
+
+                    <div>
+
+                        <h3>
+                            Reviewer Assessment
+                        </h3>
+
+                        <p>
+                            Reviewer values never overwrite the original proposal.
+                        </p>
+
+                    </div>
+
+
+                    <span class="status review-status">
+
+                        {% if finding.human_decision %}
+
+                        {{ finding.human_decision }}
+
+                        {% else %}
+
+                        NOT REVIEWED
+
+                        {% endif %}
+
+                    </span>
+
+
+                </div>
+
+
+                <div class="reviewer-grid">
+
+
+                    <div class="review-field">
+
+                        <label>
+                            Suggested Severity
+                        </label>
+
+                        <div class="readonly-value">
+
+                            {{ finding.suggested_severity }}
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="review-field">
+
+                        <label for="finalSeverity">
+                            Final Severity
+                        </label>
+
+                        <select id="finalSeverity">
+
+                            <option
+                                value=""
+                                {% if not finding.final_severity %}
+                                selected
+                                {% endif %}
+                            >
+                                Not assigned
+                            </option>
+
+                            <option
+                                value="LOW"
+                                {% if finding.final_severity == "LOW" %}
+                                selected
+                                {% endif %}
+                            >
+                                Low
+                            </option>
+
+                            <option
+                                value="MEDIUM"
+                                {% if finding.final_severity == "MEDIUM" %}
+                                selected
+                                {% endif %}
+                            >
+                                Medium
+                            </option>
+
+                            <option
+                                value="HIGH"
+                                {% if finding.final_severity == "HIGH" %}
+                                selected
+                                {% endif %}
+                            >
+                                High
+                            </option>
+
+                            <option
+                                value="CRITICAL"
+                                {% if finding.final_severity == "CRITICAL" %}
+                                selected
+                                {% endif %}
+                            >
+                                Critical
+                            </option>
+
+                        </select>
+
+                    </div>
+
+
+                    <div class="review-field">
+
+                        <label>
+                            Proposed CWE
+                        </label>
+
+                        <div class="readonly-value">
+
+                            {{ finding.proposed_cwe }}
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="review-field">
+
+                        <label for="reviewerCwe">
+                            Reviewer CWE
+                        </label>
+
+                        <input
+                            id="reviewerCwe"
+                            type="text"
+                            placeholder="e.g. CWE-89"
+                            value="{{ finding.reviewer_cwe }}"
+                        >
+
+                    </div>
+
+
+                </div>
+
+
+                <p class="risk-note">
+
+                    Review data is currently stored in Flask memory
+                    and resets when the development server restarts.
+
+                </p>
+
+
+            </article>
+
+
         </section>
 
-        <section class="review-actions">
 
-            <button class="reject-button" disabled>
-                Reject Finding
-            </button>
+        <!-- ======================================================
+             HUMAN DECISION
+             ====================================================== -->
 
-            <button class="accept-button" disabled>
-                Accept Finding
-            </button>
+        <section class="human-review-section">
+
+
+            <div class="review-comment">
+
+
+                <label for="reviewComment">
+
+                    Reviewer Comment
+
+                </label>
+
+
+                <textarea
+                    id="reviewComment"
+                    rows="3"
+                    placeholder="Add reasoning, observations or notes..."
+                >{{ finding.reviewer_comment }}</textarea>
+
+
+                <small
+                    id="reviewSaveStatus"
+                    class="save-status"
+                ></small>
+
+
+            </div>
+
+
+            <div class="decision-info">
+
+
+                <span>
+                    Human Decision
+                </span>
+
+
+                {% if finding.verification_status != "COMPLETED" %}
+
+                <small>
+
+                    A human decision cannot be recorded until
+                    independent verification has completed.
+
+                </small>
+
+                {% else %}
+
+                <small>
+
+                    Verification is complete. The reviewer may now
+                    record an independent decision.
+
+                </small>
+
+                {% endif %}
+
+
+                {% if finding.human_decision %}
+
+                <strong
+                    id="recordedHumanDecision"
+                    style="
+                        display: block;
+                        margin-top: 8px;
+                    "
+                >
+
+                    Recorded decision:
+                    {{ finding.human_decision }}
+
+                </strong>
+
+                {% endif %}
+
+
+            </div>
+
+
+            <div class="decision-buttons">
+
+
+                <button
+                    id="rejectButton"
+                    class="reject-button"
+                    {% if finding.verification_status != "COMPLETED" %}
+                    disabled
+                    {% endif %}
+                >
+
+                    Reject Finding
+
+                </button>
+
+
+                <button
+                    id="reviewButton"
+                    class="review-button"
+                    {% if finding.verification_status != "COMPLETED" %}
+                    disabled
+                    {% endif %}
+                >
+
+                    Needs Further Review
+
+                </button>
+
+
+                <button
+                    id="acceptButton"
+                    class="accept-button"
+                    {% if finding.verification_status != "COMPLETED" %}
+                    disabled
+                    {% endif %}
+                >
+
+                    Accept Finding
+
+                </button>
+
+
+            </div>
+
 
         </section>
 
-    </main>
+
+    </section>
+
+
+    <!-- ==========================================================
+         RIGHT COLUMN
+         ========================================================== -->
+
+    <aside class="right-column">
+
+
+        <!-- TIMELINE -->
+
+        <article class="side-panel">
+
+
+            <h3>
+                Finding Timeline
+            </h3>
+
+
+            <div class="timeline">
+
+
+                <div class="timeline-item completed">
+
+                    <span class="timeline-dot"></span>
+
+                    <div>
+
+                        <strong>
+                            Finding proposed
+                        </strong>
+
+                        <small>
+
+                            {{ finding.proposal_source }}
+
+                        </small>
+
+                    </div>
+
+                </div>
+
+
+                <div
+                    class="
+                        timeline-item
+                        {% if finding.verification_status == 'COMPLETED' %}
+                        completed
+                        {% endif %}
+                    "
+                >
+
+                    <span class="timeline-dot"></span>
+
+                    <div>
+
+                        <strong>
+                            Evidence verification
+                        </strong>
+
+                        <small>
+
+                            {{ finding.verification_status }}
+
+                        </small>
+
+                    </div>
+
+                </div>
+
+
+                <div
+                    class="
+                        timeline-item
+                        {% if finding.human_decision %}
+                        completed
+                        {% endif %}
+                    "
+                >
+
+                    <span class="timeline-dot"></span>
+
+                    <div>
+
+                        <strong>
+                            Human review
+                        </strong>
+
+                        <small>
+
+                            {% if finding.human_decision %}
+
+                            {{ finding.human_decision }}
+
+                            {% elif finding.verification_status == "COMPLETED" %}
+
+                            Ready for review
+
+                            {% else %}
+
+                            Waiting
+
+                            {% endif %}
+
+                        </small>
+
+                    </div>
+
+                </div>
+
+
+            </div>
+
+
+        </article>
+
+
+        <!-- VERIFICATION SUMMARY -->
+
+        <article class="side-panel">
+
+
+            <h3>
+                Verification Summary
+            </h3>
+
+
+            <div class="related-item">
+
+                <div>
+
+                    <small>
+                        Oracle Status
+                    </small>
+
+                    <strong>
+                        {{ finding.verification_status }}
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <div class="related-item">
+
+                <div>
+
+                    <small>
+                        Evidence Gate
+                    </small>
+
+                    <strong>
+                        {{ finding.evidence_gate_result }}
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <div class="related-item">
+
+                <div>
+
+                    <small>
+                        Verification Tests
+                    </small>
+
+                    <strong>
+                        {{ finding.evidence | length }}
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            {% if finding.run_id %}
+
+            <div class="related-item">
+
+                <div>
+
+                    <small>
+                        Run ID
+                    </small>
+
+                    <strong
+                        style="
+                            font-size: 11px;
+                            word-break: break-all;
+                        "
+                    >
+                        {{ finding.run_id }}
+                    </strong>
+
+                </div>
+
+            </div>
+
+            {% endif %}
+
+
+            {% if finding.evidence_source == "RUNTIME" %}
+
+            <p class="demo-label">
+
+                Real runtime evidence from local DVWA lab
+
+            </p>
+
+            {% endif %}
+
+
+        </article>
+
+
+        <!-- ACTIONS -->
+
+        <article class="side-panel">
+
+
+            <h3>
+                Actions
+            </h3>
+
+
+            <button disabled>
+
+                View in Report
+
+            </button>
+
+
+            <button disabled>
+
+                Export Finding
+
+            </button>
+
+
+        </article>
+
+
+    </aside>
+
 
 </div>
 
-</body>
-</html>
+
+{% endblock %}

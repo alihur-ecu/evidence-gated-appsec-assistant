@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        {% block title %}
+        Evidence-Gated AppSec Finding Assistant
+        {% endblock %}
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/app.css') }}"
+    >
+
+</head>
+
+
+<body>
+
+<div class="app-shell">
+
+
+    <!-- ==========================================================
+         LEFT SIDEBAR
+         ========================================================== -->
+
+    <aside class="sidebar">
+
+
+        <!-- ======================================================
+             APPLICATION BRAND
+             ====================================================== -->
+
+        <div class="brand">
+
+            <h2>
+                Evidence-Gated
+            </h2>
+
+            <p>
+                AppSec Finding Assistant
+            </p>
+
+        </div>
+
+
+        <!-- ======================================================
+             MAIN NAVIGATION
+             ====================================================== -->
+
+        <nav>
+
+
+            <!-- Dashboard
+                 Not implemented yet -->
+
+            <a
+                href="#"
+                class="{% if active_page == 'dashboard' %}active{% endif %}"
+            >
+                Dashboard
+            </a>
+
+
+            <!-- Findings
+                 Real Flask route -->
+
+            <a
+                href="{{ url_for('findings_list') }}"
+                class="{% if active_page == 'findings' %}active{% endif %}"
+            >
+                Findings
+            </a>
+
+
+            <!-- Targets
+                 Not implemented yet -->
+
+            <a
+                href="#"
+                class="{% if active_page == 'targets' %}active{% endif %}"
+            >
+                Targets
+            </a>
+
+
+            <!-- Evidence Store
+                 Not implemented yet -->
+
+            <a
+                href="#"
+                class="{% if active_page == 'evidence' %}active{% endif %}"
+            >
+                Evidence Store
+            </a>
+
+
+            <!-- Risk Overview
+                 Not implemented yet -->
+
+            <a
+                href="#"
+                class="{% if active_page == 'risk' %}active{% endif %}"
+            >
+                Risk Overview
+            </a>
+
+
+            <!-- Reports
+                 Not implemented yet -->
+
+            <a
+                href="#"
+                class="{% if active_page == 'reports' %}active{% endif %}"
+            >
+                Reports
+            </a>
+
+
+            <!-- Settings
+                 Not implemented yet -->
+
+            <a
+                href="#"
+                class="{% if active_page == 'settings' %}active{% endif %}"
+            >
+                Settings
+            </a>
+
+
+        </nav>
+
+
+        <!-- ======================================================
+             CURRENT PROJECT FOCUS
+             ====================================================== -->
+
+        <div class="scope-card">
+
+            <span>
+                Current Focus
+            </span>
+
+
+            <strong>
+
+                {% block current_focus %}
+
+                Core MVP
+
+                {% endblock %}
+
+            </strong>
+
+
+            <small>
+                Core MVP
+            </small>
+
+        </div>
+
+
+    </aside>
+
+
+    <!-- ==========================================================
+         MAIN APPLICATION AREA
+         ========================================================== -->
+
+    <main class="main-content">
+
+
+        <!-- ======================================================
+             TOP BAR
+             ====================================================== -->
+
+        <header class="topbar">
+
+
+            <div class="target-box">
+
+                <span>
+                    Target
+                </span>
+
+
+                {% block target_selector %}
+
+                <strong>
+                    Local Lab
+                </strong>
+
+                {% endblock %}
+
+            </div>
+
+
+            <div class="top-status">
+
+                <span class="dot"></span>
+
+
+                {% block top_status %}
+
+                Application
+
+                {% endblock %}
+
+            </div>
+
+
+        </header>
+
+
+        <!-- ======================================================
+             PAGE-SPECIFIC CONTENT
+             ====================================================== -->
+
+        {% block content %}
+        {% endblock %}
+
+
+    </main>
+
+
+</div>
+
+
+<!-- ==============================================================
+     SHARED JAVASCRIPT
+     ============================================================== -->
+
+<script
+    src="{{ url_for('static', filename='js/app.js') }}"
+></script>
+
+
+{% block scripts %}
+{% endblock %}
+
+
+</body>
+
+</html>
