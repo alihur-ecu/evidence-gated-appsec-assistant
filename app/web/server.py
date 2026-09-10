@@ -1,28 +1,5 @@
-"""
-Flask web application for the Evidence-Gated AppSec Finding Assistant.
-
-Current development architecture:
-
-Preloaded Finding
-        ↓
-Runtime Verifier
-        ↓
-Evidence
-        ↓
-Evidence Gate
-        ↓
-PROVED / REFUTED / NEEDS_HUMAN
-        ↓
-Human Review
-
-The live LLM proposer is not connected yet.
-
-Therefore, the initial findings below are deliberately labelled as
-preloaded demonstration findings. The downstream verification pipeline
-uses real runtime evidence from the local DVWA lab.
-"""
-
 from __future__ import annotations
+from app.llm_proposer import propose_finding
 
 from flask import (
     Flask,
@@ -77,16 +54,17 @@ FINDING_TYPE_LABELS = {
 FINDINGS = {}
 
 
+gemini_proposal = propose_finding()
+
 sql_finding = Finding(
     finding_id="F-0001",
     finding_type=FindingType.SQL_INJECTION,
     endpoint="/vulnerabilities/sqli/",
-    parameter="id",
+    parameter=gemini_proposal.get("parameter", "id"),
     method="GET",
-    explanation=(
-        "A preloaded candidate finding identifies possible SQL "
-        "injection in the id parameter. The live LLM proposer is not "
-        "connected to the web application yet."
+    explanation=gemini_proposal.get(
+        "description",
+        "Gemini proposed a possible SQL Injection finding."
     ),
 )
 
@@ -129,7 +107,7 @@ FINDING_METADATA = {
             "DVWA Test Environment",
 
         "source_file":
-            "Preloaded / not connected",
+            "Gemini live proposal",
 
         "proposed_cwe":
             "CWE-89",
@@ -138,7 +116,7 @@ FINDING_METADATA = {
             "HIGH",
 
         "proposal_source":
-            "PRELOADED",
+            "GEMINI",
     },
 
     "F-0002": {
