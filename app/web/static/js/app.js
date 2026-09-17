@@ -20,10 +20,12 @@ document.addEventListener(
             ) {
 
                 return parts[1];
+
             }
 
 
             return null;
+
         }
 
 
@@ -31,19 +33,1302 @@ document.addEventListener(
             getFindingIdFromUrl();
 
 
-        // Findings overview has no finding-specific controls.
-        if (!findingId) {
+        // ========================================================
+        // HOME — ANALYSIS MODE SELECTION
+        // ========================================================
 
-            console.log(
-                "Findings overview loaded."
+        const analysisLaunch =
+            document.getElementById(
+                "analysisLaunch"
             );
 
-            return;
+
+        if (analysisLaunch) {
+
+            const modeCards =
+                Array.from(
+                    document.querySelectorAll(
+                        "[data-analysis-mode]"
+                    )
+                );
+
+
+            const configPanel =
+                document.getElementById(
+                    "analysisConfigPanel"
+                );
+
+
+            const staticConfig =
+                document.getElementById(
+                    "staticConfig"
+                );
+
+
+            const dynamicConfig =
+                document.getElementById(
+                    "dynamicConfig"
+                );
+
+
+            const configPanelTitle =
+                document.getElementById(
+                    "configPanelTitle"
+                );
+
+
+            const configPanelDescription =
+                document.getElementById(
+                    "configPanelDescription"
+                );
+
+
+            const changeModeButton =
+                document.getElementById(
+                    "changeModeButton"
+                );
+
+
+            const startAnalysisButton =
+                document.getElementById(
+                    "startAnalysisButton"
+                );
+
+
+            const validationContainer =
+                document.querySelector(
+                    ".config-validation"
+                );
+
+
+            const validationMessage =
+                document.getElementById(
+                    "analysisValidationMessage"
+                );
+
+
+            const staticSourceFile =
+                document.getElementById(
+                    "staticSourceFile"
+                );
+
+
+            const staticFileName =
+                document.getElementById(
+                    "staticFileName"
+                );
+
+
+            const staticDropZone =
+                document.getElementById(
+                    "staticDropZone"
+                );
+
+
+            const selectedSourceCard =
+                document.getElementById(
+                    "selectedSourceCard"
+                );
+
+
+            const selectedSourceName =
+                document.getElementById(
+                    "selectedSourceName"
+                );
+
+
+            const selectedSourceDescription =
+                document.getElementById(
+                    "selectedSourceDescription"
+                );
+
+
+            const selectedApplicationName =
+                document.getElementById(
+                    "selectedApplicationName"
+                );
+
+
+            const selectedFileType =
+                document.getElementById(
+                    "selectedFileType"
+                );
+
+
+            const selectedFileExtension =
+                document.getElementById(
+                    "selectedFileExtension"
+                );
+
+
+            const selectedContextSource =
+                document.getElementById(
+                    "selectedContextSource"
+                );
+
+
+            const staticAuthorised =
+                document.getElementById(
+                    "staticAuthorised"
+                );
+
+
+            const dynamicTargetUrl =
+                document.getElementById(
+                    "dynamicTargetUrl"
+                );
+
+
+            const dynamicScope =
+                document.getElementById(
+                    "dynamicScope"
+                );
+
+
+            const dynamicAuthorised =
+                document.getElementById(
+                    "dynamicAuthorised"
+                );
+
+
+            let selectedMode = null;
+
+
+            // ====================================================
+            // STATIC SOURCE IDENTIFICATION
+            // ====================================================
+
+            const supportedStaticExtensions = {
+                ".zip": {
+                    type: "ZIP archive",
+                    context: "Project archive"
+                },
+                ".py": {
+                    type: "Python source file",
+                    context: "Single source file"
+                },
+                ".php": {
+                    type: "PHP source file",
+                    context: "Single source file"
+                },
+                ".js": {
+                    type: "JavaScript source file",
+                    context: "Single source file"
+                },
+                ".ts": {
+                    type: "TypeScript source file",
+                    context: "Single source file"
+                },
+                ".html": {
+                    type: "HTML source file",
+                    context: "Single source file"
+                },
+                ".htm": {
+                    type: "HTML source file",
+                    context: "Single source file"
+                },
+                ".jsx": {
+                    type: "JSX source file",
+                    context: "Single source file"
+                },
+                ".tsx": {
+                    type: "TSX source file",
+                    context: "Single source file"
+                },
+                ".java": {
+                    type: "Java source file",
+                    context: "Single source file"
+                },
+                ".cs": {
+                    type: "C# source file",
+                    context: "Single source file"
+                },
+                ".go": {
+                    type: "Go source file",
+                    context: "Single source file"
+                },
+                ".rb": {
+                    type: "Ruby source file",
+                    context: "Single source file"
+                },
+                ".c": {
+                    type: "C source file",
+                    context: "Single source file"
+                },
+                ".cpp": {
+                    type: "C++ source file",
+                    context: "Single source file"
+                },
+                ".vue": {
+                    type: "Vue source file",
+                    context: "Single source file"
+                },
+                ".txt": {
+                    type: "Text source file",
+                    context: "Single source file"
+                }
+            };
+
+
+            function getStaticFileInfo(
+                file
+            ) {
+
+                if (!file || !file.name) {
+
+                    return null;
+
+                }
+
+
+                const fileName =
+                    file.name.trim();
+
+
+                const dotIndex =
+                    fileName.lastIndexOf(".");
+
+
+                const extension =
+                    dotIndex >= 0
+                    ? fileName
+                        .slice(dotIndex)
+                        .toLowerCase()
+                    : "";
+
+
+                const definition =
+                    supportedStaticExtensions[
+                        extension
+                    ];
+
+
+                if (!definition) {
+
+                    return null;
+
+                }
+
+
+                const applicationName =
+                    dotIndex > 0
+                    ? fileName
+                        .slice(0, dotIndex)
+                    : fileName;
+
+
+                return {
+                    fileName: fileName,
+                    extension: extension,
+                    applicationName: applicationName,
+                    type: definition.type,
+                    context: definition.context
+                };
+
+            }
+
+
+            function clearStaticSourceSummary() {
+
+                if (selectedApplicationName) {
+
+                    selectedApplicationName.value =
+                        "";
+
+                }
+
+
+                if (selectedSourceCard) {
+
+                    selectedSourceCard.hidden =
+                        true;
+
+                }
+
+
+                if (staticDropZone) {
+
+                    staticDropZone.classList.remove(
+                        "file-selected"
+                    );
+
+                }
+
+            }
+
+
+            function renderStaticSourceSummary(
+                fileInfo
+            ) {
+
+                if (!fileInfo) {
+
+                    clearStaticSourceSummary();
+                    return;
+
+                }
+
+
+                if (selectedSourceName) {
+
+                    selectedSourceName.textContent =
+                        fileInfo.fileName;
+
+                }
+
+
+                if (selectedSourceDescription) {
+
+                    selectedSourceDescription.textContent =
+                        `${fileInfo.type} · ${fileInfo.extension.toUpperCase()}`;
+
+                }
+
+
+                if (selectedApplicationName) {
+
+                    selectedApplicationName.value =
+                        fileInfo.applicationName;
+
+                }
+
+
+                if (selectedFileType) {
+
+                    selectedFileType.textContent =
+                        fileInfo.type;
+
+                }
+
+
+                if (selectedFileExtension) {
+
+                    selectedFileExtension.textContent =
+                        fileInfo.extension;
+
+                }
+
+
+                if (selectedContextSource) {
+
+                    selectedContextSource.textContent =
+                        fileInfo.context;
+
+                }
+
+
+                if (selectedSourceCard) {
+
+                    selectedSourceCard.hidden =
+                        false;
+
+                }
+
+
+                if (staticDropZone) {
+
+                    staticDropZone.classList.add(
+                        "file-selected"
+                    );
+
+                }
+
+            }
+
+
+            // ====================================================
+            // URL VALIDATION
+            // ====================================================
+
+            function isValidUrl(
+                value
+            ) {
+
+                try {
+
+                    const url =
+                        new URL(
+                            value
+                        );
+
+
+                    return (
+                        url.protocol === "http:"
+                        || url.protocol === "https:"
+                    );
+
+                }
+                catch (error) {
+
+                    return false;
+
+                }
+
+            }
+
+
+            // ====================================================
+            // CONFIGURATION VALIDATION
+            // ====================================================
+
+            function updateValidation() {
+
+                let ready = false;
+
+                let message =
+                    "Complete all required fields to continue.";
+
+
+                // ------------------------------------------------
+                // STATIC ANALYSIS
+                // ------------------------------------------------
+
+                if (selectedMode === "static") {
+
+                    const file =
+                        staticSourceFile
+                        && staticSourceFile.files
+                        ? staticSourceFile.files[0]
+                        : null;
+
+
+                    const fileInfo =
+                        getStaticFileInfo(
+                            file
+                        );
+
+
+                    const applicationName =
+                        selectedApplicationName
+                        ? selectedApplicationName.value.trim()
+                        : "";
+
+
+                    const authorised =
+                        Boolean(
+                            staticAuthorised
+                            && staticAuthorised.checked
+                        );
+
+
+                    ready =
+                        Boolean(
+                            file
+                            && fileInfo
+                            && applicationName
+                            && authorised
+                        );
+
+
+                    if (!file) {
+
+                        message =
+                            "Select an authorised source file or project archive.";
+
+                    }
+                    else if (!fileInfo) {
+
+                        message =
+                            "This file type is not supported by the current frontend mock.";
+
+                    }
+                    else if (!applicationName) {
+
+                        message =
+                            "Enter an application name before continuing.";
+
+                    }
+                    else if (!authorised) {
+
+                        message =
+                            "Confirm authorisation before continuing.";
+
+                    }
+                    else {
+
+                        message =
+                            "Static analysis configuration is complete.";
+
+                    }
+
+                }
+
+
+                // ------------------------------------------------
+                // DYNAMIC ANALYSIS
+                // ------------------------------------------------
+
+                if (selectedMode === "dynamic") {
+
+                    const targetUrl =
+                        dynamicTargetUrl
+                        ? dynamicTargetUrl.value.trim()
+                        : "";
+
+
+                    const scope =
+                        dynamicScope
+                        ? dynamicScope.value.trim()
+                        : "";
+
+
+                    const authorised =
+                        Boolean(
+                            dynamicAuthorised
+                            && dynamicAuthorised.checked
+                        );
+
+
+                    ready =
+                        Boolean(
+                            targetUrl
+                            && isValidUrl(
+                                targetUrl
+                            )
+                            && scope
+                            && authorised
+                        );
+
+
+                    if (!targetUrl) {
+
+                        message =
+                            "Enter the authorised target URL.";
+
+                    }
+                    else if (
+                        !isValidUrl(
+                            targetUrl
+                        )
+                    ) {
+
+                        message =
+                            "Enter a valid HTTP or HTTPS target URL.";
+
+                    }
+                    else if (!scope) {
+
+                        message =
+                            "Define the analysis scope.";
+
+                    }
+                    else if (!authorised) {
+
+                        message =
+                            "Confirm authorisation before continuing.";
+
+                    }
+                    else {
+
+                        message =
+                            "Dynamic analysis configuration is complete.";
+
+                    }
+
+                }
+
+
+                // ------------------------------------------------
+                // START BUTTON
+                // ------------------------------------------------
+
+                if (startAnalysisButton) {
+
+                    startAnalysisButton.disabled =
+                        !ready;
+
+                }
+
+
+                // ------------------------------------------------
+                // VALIDATION MESSAGE
+                // ------------------------------------------------
+
+                if (validationMessage) {
+
+                    validationMessage.textContent =
+                        message;
+
+                }
+
+
+                if (validationContainer) {
+
+                    validationContainer.classList.toggle(
+                        "ready",
+                        ready
+                    );
+
+                }
+
+            }
+
+
+            // ====================================================
+            // SELECT ANALYSIS MODE
+            // ====================================================
+
+            function selectMode(
+                mode
+            ) {
+
+                selectedMode =
+                    mode;
+
+
+                modeCards.forEach(
+                    function (card) {
+
+                        const isSelected =
+                            card.dataset.analysisMode
+                            === mode;
+
+
+                        card.classList.toggle(
+                            "selected",
+                            isSelected
+                        );
+
+
+                        card.classList.toggle(
+                            "dimmed",
+                            !isSelected
+                        );
+
+
+                        card.setAttribute(
+                            "aria-pressed",
+                            isSelected
+                            ? "true"
+                            : "false"
+                        );
+
+
+                        const status =
+                            card.querySelector(
+                                "[data-mode-status]"
+                            );
+
+
+                        if (status) {
+
+                            status.textContent =
+                                isSelected
+                                ? "SELECTED"
+                                : "SELECT";
+
+                        }
+
+                    }
+                );
+
+
+                // -----------------------------------------------
+                // SHOW CONFIGURATION PANEL
+                // -----------------------------------------------
+
+                if (configPanel) {
+
+                    configPanel.hidden =
+                        false;
+
+                }
+
+
+                // -----------------------------------------------
+                // STATIC / DYNAMIC CONFIGURATION
+                // -----------------------------------------------
+
+                if (staticConfig) {
+
+                    staticConfig.hidden =
+                        mode !== "static";
+
+                }
+
+
+                if (dynamicConfig) {
+
+                    dynamicConfig.hidden =
+                        mode !== "dynamic";
+
+                }
+
+
+                // -----------------------------------------------
+                // PANEL TITLE
+                // -----------------------------------------------
+
+                if (configPanelTitle) {
+
+                    configPanelTitle.textContent =
+                        mode === "static"
+                        ? "Configure Static Analysis"
+                        : "Configure Dynamic Analysis";
+
+                }
+
+
+                if (configPanelDescription) {
+
+                    configPanelDescription.textContent =
+                        mode === "static"
+                        ? "Provide an authorised source file or project archive. File details are identified automatically."
+                        : "Provide the authorised running target and define the scope.";
+
+                }
+
+
+                updateValidation();
+
+
+                // -----------------------------------------------
+                // MOVE USER TO CONFIGURATION
+                // -----------------------------------------------
+
+                window.requestAnimationFrame(
+                    function () {
+
+                        configPanel.scrollIntoView(
+                            {
+                                behavior: "smooth",
+                                block: "nearest"
+                            }
+                        );
+
+                    }
+                );
+
+            }
+
+
+            // ====================================================
+            // CLEAR MODE SELECTION
+            // ====================================================
+
+            function clearSelection() {
+
+                selectedMode =
+                    null;
+
+
+                modeCards.forEach(
+                    function (card) {
+
+                        card.classList.remove(
+                            "selected",
+                            "dimmed"
+                        );
+
+
+                        card.setAttribute(
+                            "aria-pressed",
+                            "false"
+                        );
+
+
+                        const status =
+                            card.querySelector(
+                                "[data-mode-status]"
+                            );
+
+
+                        if (status) {
+
+                            status.textContent =
+                                "SELECT";
+
+                        }
+
+                    }
+                );
+
+
+                if (configPanel) {
+
+                    configPanel.hidden =
+                        true;
+
+                }
+
+
+                if (staticConfig) {
+
+                    staticConfig.hidden =
+                        true;
+
+                }
+
+
+                if (dynamicConfig) {
+
+                    dynamicConfig.hidden =
+                        true;
+
+                }
+
+
+                updateValidation();
+
+            }
+
+
+            // ====================================================
+            // MODE CARD EVENTS
+            // ====================================================
+
+            modeCards.forEach(
+                function (card) {
+
+                    card.addEventListener(
+                        "click",
+                        function (event) {
+
+                            if (
+                                event.target.closest(
+                                    "input, button, label, a"
+                                )
+                            ) {
+
+                                return;
+
+                            }
+
+
+                            selectMode(
+                                card.dataset.analysisMode
+                            );
+
+                        }
+                    );
+
+
+                    card.addEventListener(
+                        "keydown",
+                        function (event) {
+
+                            if (
+                                event.key === "Enter"
+                                || event.key === " "
+                            ) {
+
+                                event.preventDefault();
+
+
+                                selectMode(
+                                    card.dataset.analysisMode
+                                );
+
+                            }
+
+                        }
+                    );
+
+                }
+            );
+
+
+            // ====================================================
+            // CHANGE MODE
+            // ====================================================
+
+            if (changeModeButton) {
+
+                changeModeButton.addEventListener(
+                    "click",
+                    clearSelection
+                );
+
+            }
+
+
+            // ====================================================
+            // FIELD EVENTS
+            // ====================================================
+
+            [
+                selectedApplicationName,
+                staticAuthorised,
+                dynamicTargetUrl,
+                dynamicScope,
+                dynamicAuthorised
+            ].forEach(
+                function (element) {
+
+                    if (!element) {
+
+                        return;
+
+                    }
+
+
+                    element.addEventListener(
+                        "input",
+                        updateValidation
+                    );
+
+
+                    element.addEventListener(
+                        "change",
+                        updateValidation
+                    );
+
+                }
+            );
+
+
+            // ====================================================
+            // STATIC SOURCE FILE
+            // ====================================================
+
+            if (staticSourceFile) {
+
+                staticSourceFile.addEventListener(
+                    "change",
+                    function () {
+
+                        const file =
+                            staticSourceFile.files
+                            && staticSourceFile.files[0]
+                            ? staticSourceFile.files[0]
+                            : null;
+
+
+                        if (!file) {
+
+                            if (staticFileName) {
+
+                                staticFileName.textContent =
+                                    "ZIP, PY, PHP, JS, TS, HTML, JAVA, TXT and other supported source files.";
+
+                            }
+
+
+                            clearStaticSourceSummary();
+                            updateValidation();
+                            return;
+
+                        }
+
+
+                        const fileInfo =
+                            getStaticFileInfo(
+                                file
+                            );
+
+
+                        if (!fileInfo) {
+
+                            staticSourceFile.value =
+                                "";
+
+
+                            if (staticFileName) {
+
+                                staticFileName.textContent =
+                                    "Unsupported file type. Choose a supported source file or ZIP archive.";
+
+                            }
+
+
+                            clearStaticSourceSummary();
+                            updateValidation();
+                            return;
+
+                        }
+
+
+                        if (staticFileName) {
+
+                            staticFileName.textContent =
+                                fileInfo.fileName;
+
+                        }
+
+
+                        renderStaticSourceSummary(
+                            fileInfo
+                        );
+
+
+                        updateValidation();
+
+                    }
+                );
+
+            }
+
+
+            // ====================================================
+            // STATIC DRAG AND DROP
+            // ====================================================
+
+            if (
+                staticDropZone
+                && staticSourceFile
+            ) {
+
+                [
+                    "dragenter",
+                    "dragover"
+                ].forEach(
+                    function (eventName) {
+
+                        staticDropZone.addEventListener(
+                            eventName,
+                            function (event) {
+
+                                event.preventDefault();
+
+
+                                staticDropZone.classList.add(
+                                    "drag-over"
+                                );
+
+                            }
+                        );
+
+                    }
+                );
+
+
+                [
+                    "dragleave",
+                    "drop"
+                ].forEach(
+                    function (eventName) {
+
+                        staticDropZone.addEventListener(
+                            eventName,
+                            function (event) {
+
+                                event.preventDefault();
+
+
+                                staticDropZone.classList.remove(
+                                    "drag-over"
+                                );
+
+                            }
+                        );
+
+                    }
+                );
+
+
+                staticDropZone.addEventListener(
+                    "drop",
+                    function (event) {
+
+                        const files =
+                            event.dataTransfer.files;
+
+
+                        if (!files.length) {
+
+                            return;
+
+                        }
+
+
+                        const file =
+                            files[0];
+
+
+                        const fileInfo =
+                            getStaticFileInfo(
+                                file
+                            );
+
+
+                        if (!fileInfo) {
+
+                            if (staticFileName) {
+
+                                staticFileName.textContent =
+                                    "Unsupported file type. Choose a supported source file or ZIP archive.";
+
+                            }
+
+
+                            clearStaticSourceSummary();
+                            updateValidation();
+                            return;
+
+                        }
+
+
+                        const transfer =
+                            new DataTransfer();
+
+
+                        transfer.items.add(
+                            file
+                        );
+
+
+                        staticSourceFile.files =
+                            transfer.files;
+
+
+                        staticSourceFile.dispatchEvent(
+                            new Event(
+                                "change",
+                                {
+                                    bubbles: true
+                                }
+                            )
+                        );
+
+                    }
+                );
+
+            }
+
+
+            // ====================================================
+            // START ANALYSIS
+            // ====================================================
+
+            if (startAnalysisButton) {
+
+                startAnalysisButton.addEventListener(
+                    "click",
+                    async function () {
+
+                        updateValidation();
+
+                        if (
+                            startAnalysisButton.disabled
+                            || !selectedMode
+                        ) {
+                            return;
+                        }
+
+                        if (selectedMode !== "static") {
+                            if (validationMessage) {
+                                validationMessage.textContent =
+                                    "Dynamic provider integration is not connected yet.";
+                            }
+                            return;
+                        }
+
+                        const file =
+                            staticSourceFile
+                            && staticSourceFile.files
+                            ? staticSourceFile.files[0]
+                            : null;
+
+                        const applicationName =
+                            selectedApplicationName
+                            ? selectedApplicationName.value.trim()
+                            : "";
+
+                        if (!file || !applicationName) {
+                            updateValidation();
+                            return;
+                        }
+
+                        const originalText =
+                            startAnalysisButton.textContent;
+
+                        startAnalysisButton.disabled = true;
+                        startAnalysisButton.textContent = "Starting Analysis...";
+
+                        if (validationMessage) {
+                            validationMessage.textContent =
+                                "Uploading the authorised source to the configured analysis provider...";
+                        }
+
+                        const formData = new FormData();
+                        formData.append("source_file", file);
+                        formData.append("application_name", applicationName);
+                        formData.append(
+                            "authorised",
+                            staticAuthorised && staticAuthorised.checked
+                            ? "true"
+                            : "false"
+                        );
+
+                        try {
+                            const response = await fetch(
+                                "/analysis/static",
+                                {
+                                    method: "POST",
+                                    body: formData
+                                }
+                            );
+
+                            let result = {};
+
+                            try {
+                                result = await response.json();
+                            }
+                            catch (error) {
+                                result = {
+                                    ok: false,
+                                    error: "The server returned an invalid response."
+                                };
+                            }
+
+                            if (!response.ok || !result.ok) {
+                                throw new Error(
+                                    result.error
+                                    || `Request failed (${response.status})`
+                                );
+                            }
+
+                            if (validationMessage) {
+                                validationMessage.textContent =
+                                    `Analysis prepared by ${result.provider}. Opening ${result.finding_count} proposed finding(s)...`;
+                            }
+
+                            window.location.href = result.redirect_url;
+                        }
+                        catch (error) {
+                            console.error("Unable to start analysis:", error);
+
+                            if (validationMessage) {
+                                validationMessage.textContent =
+                                    `Unable to start analysis: ${error.message}`;
+                            }
+
+                            startAnalysisButton.disabled = false;
+                            startAnalysisButton.textContent = originalText;
+                        }
+                    }
+                );
+            }
+
+
+            // ====================================================
+            // INITIAL HOME STATE
+            // ====================================================
+
+            clearSelection();
+
         }
 
 
         // ========================================================
-        // ELEMENTS
+        // NON-FINDING PAGES
+        // ========================================================
+
+        // Pages such as Start Analysis and Findings Overview
+        // do not have finding-specific controls.
+        if (!findingId) {
+
+            console.log(
+                "Application page loaded."
+            );
+
+            return;
+
+        }
+
+
+        // ========================================================
+        // FINDING DETAIL ELEMENTS
         // ========================================================
 
         const runVerificationButton =
@@ -51,45 +1336,180 @@ document.addEventListener(
                 "runVerificationButton"
             );
 
+
         const verificationMessage =
             document.getElementById(
                 "verificationMessage"
             );
+
 
         const finalSeverity =
             document.getElementById(
                 "finalSeverity"
             );
 
-        const reviewerCwe =
-            document.getElementById(
-                "reviewerCwe"
-            );
 
         const reviewComment =
             document.getElementById(
                 "reviewComment"
             );
 
+
         const reviewSaveStatus =
             document.getElementById(
                 "reviewSaveStatus"
             );
+
 
         const rejectButton =
             document.getElementById(
                 "rejectButton"
             );
 
+
         const reviewButton =
             document.getElementById(
                 "reviewButton"
             );
 
+
         const acceptButton =
             document.getElementById(
                 "acceptButton"
             );
+
+
+        // ========================================================
+        // WORKFLOW VIEW NAVIGATION
+        // Visual navigation only: it never changes or deletes
+        // verification evidence, reviewer fields, or decisions.
+        // ========================================================
+
+        const findingWorkflow =
+            document.getElementById("findingWorkflow");
+
+        if (findingWorkflow) {
+
+            const workflowStages =
+                Array.from(
+                    findingWorkflow.querySelectorAll(
+                        "[data-workflow-stage]"
+                    )
+                );
+
+            const verificationComplete =
+                findingWorkflow.dataset.verificationComplete === "true";
+
+            const humanDecision =
+                (findingWorkflow.dataset.humanDecision || "").trim();
+
+            let currentWorkflowStage =
+                verificationComplete ? 3 : 1;
+
+            function renderWorkflowStage(stageNumber) {
+
+                currentWorkflowStage = stageNumber;
+
+                workflowStages.forEach(function (stage) {
+                    const number = Number(stage.dataset.workflowStage);
+                    stage.classList.toggle(
+                        "is-current",
+                        number === currentWorkflowStage
+                    );
+                    stage.setAttribute(
+                        "aria-current",
+                        number === currentWorkflowStage ? "step" : "false"
+                    );
+                });
+
+            }
+
+            function canOpenWorkflowStage(stageNumber) {
+
+                if (stageNumber === 1) {
+                    return true;
+                }
+
+                if (stageNumber === 2) {
+                    return true;
+                }
+
+                if (stageNumber === 3) {
+                    return verificationComplete;
+                }
+
+                // Report remains unavailable until a report view exists.
+                // A human decision is still treated as its prerequisite.
+                if (stageNumber === 4) {
+                    return Boolean(humanDecision) && false;
+                }
+
+                return false;
+
+            }
+
+            function stageName(stageNumber) {
+                const names = {
+                    1: "LLM Proposal",
+                    2: "Verification",
+                    3: "Human Review",
+                    4: "Report"
+                };
+                return names[stageNumber] || "previous stage";
+            }
+
+            function confirmPreviousStage(stageNumber) {
+
+                return window.confirm(
+                    `View ${stageName(stageNumber)}?\n\n` +
+                    "You are returning to a previous workflow stage. " +
+                    "Existing verification evidence and human-review data will be preserved."
+                );
+
+            }
+
+            function openWorkflowStage(stage) {
+
+                const stageNumber =
+                    Number(stage.dataset.workflowStage);
+
+                if (!canOpenWorkflowStage(stageNumber)) {
+                    return;
+                }
+
+                if (stageNumber < currentWorkflowStage) {
+                    if (!confirmPreviousStage(stageNumber)) {
+                        return;
+                    }
+                }
+
+                renderWorkflowStage(stageNumber);
+
+                const targetId = stage.dataset.workflowTarget;
+                const target = targetId
+                    ? document.getElementById(targetId)
+                    : null;
+
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start"
+                    });
+                }
+
+            }
+
+            workflowStages.forEach(function (stage) {
+
+                stage.addEventListener("click", function () {
+                    openWorkflowStage(stage);
+                });
+
+            });
+
+            renderWorkflowStage(currentWorkflowStage);
+
+        }
 
 
         // ========================================================
@@ -136,6 +1556,7 @@ document.addEventListener(
                     error:
                         "The server returned an invalid response."
                 };
+
             }
 
 
@@ -145,15 +1566,17 @@ document.addEventListener(
                     data.error
                     || `Request failed (${response.status})`
                 );
+
             }
 
 
             return data;
+
         }
 
 
         // ========================================================
-        // RUN VERIFICATION
+        // RUN INDEPENDENT VERIFICATION
         // ========================================================
 
         if (runVerificationButton) {
@@ -177,7 +1600,8 @@ document.addEventListener(
                     if (verificationMessage) {
 
                         verificationMessage.textContent =
-                            "Connecting to the local DVWA lab and collecting runtime evidence...";
+                            "Connecting to the local DVWA lab and collecting independent runtime evidence...";
+
                     }
 
 
@@ -193,6 +1617,7 @@ document.addEventListener(
 
                             verificationMessage.textContent =
                                 `Verification complete: ${result.evidence_gate_result}`;
+
                         }
 
 
@@ -202,8 +1627,8 @@ document.addEventListener(
                         );
 
 
-                        // Reload so Flask renders the real evidence
-                        // collected during this verification run.
+                        // Reload so Flask renders the evidence
+                        // collected during this run.
                         window.location.reload();
 
                     }
@@ -219,6 +1644,7 @@ document.addEventListener(
 
                             verificationMessage.textContent =
                                 `Verification failed: ${error.message}`;
+
                         }
 
 
@@ -228,10 +1654,12 @@ document.addEventListener(
 
                         runVerificationButton.textContent =
                             originalText;
+
                     }
 
                 }
             );
+
         }
 
 
@@ -239,7 +1667,8 @@ document.addEventListener(
         // SAVE REVIEW FIELD TO FLASK
         // ========================================================
 
-        let saveStatusTimer = null;
+        let saveStatusTimer =
+            null;
 
 
         function showSaveStatus(
@@ -247,7 +1676,9 @@ document.addEventListener(
         ) {
 
             if (!reviewSaveStatus) {
+
                 return;
+
             }
 
 
@@ -260,6 +1691,7 @@ document.addEventListener(
                 clearTimeout(
                     saveStatusTimer
                 );
+
             }
 
 
@@ -273,6 +1705,7 @@ document.addEventListener(
                     },
                     2200
                 );
+
         }
 
 
@@ -321,7 +1754,9 @@ document.addEventListener(
 
 
                 return false;
+
             }
+
         }
 
 
@@ -342,29 +1777,7 @@ document.addEventListener(
 
                 }
             );
-        }
 
-
-        // ========================================================
-        // REVIEWER CWE
-        //
-        // Save when leaving the field so we do not send one request
-        // for every single typed character.
-        // ========================================================
-
-        if (reviewerCwe) {
-
-            reviewerCwe.addEventListener(
-                "change",
-                function () {
-
-                    saveReviewField(
-                        "reviewer_cwe",
-                        reviewerCwe.value.trim()
-                    );
-
-                }
-            );
         }
 
 
@@ -385,6 +1798,7 @@ document.addEventListener(
 
                 }
             );
+
         }
 
 
@@ -405,12 +1819,18 @@ document.addEventListener(
 
             if (saved) {
 
-                // Reload to update timeline, badge and recorded
-                // decision using server-side state.
+                // Reload to update timeline, review badge
+                // and recorded human decision.
                 window.location.reload();
+
             }
+
         }
 
+
+        // ========================================================
+        // REJECT FINDING
+        // ========================================================
 
         if (rejectButton) {
 
@@ -419,17 +1839,25 @@ document.addEventListener(
                 function () {
 
                     if (rejectButton.disabled) {
+
                         return;
+
                     }
 
 
                     recordHumanDecision(
                         "REJECTED"
                     );
+
                 }
             );
+
         }
 
+
+        // ========================================================
+        // NEEDS FURTHER REVIEW
+        // ========================================================
 
         if (reviewButton) {
 
@@ -438,17 +1866,25 @@ document.addEventListener(
                 function () {
 
                     if (reviewButton.disabled) {
+
                         return;
+
                     }
 
 
                     recordHumanDecision(
                         "NEEDS_FURTHER_REVIEW"
                     );
+
                 }
             );
+
         }
 
+
+        // ========================================================
+        // ACCEPT FINDING
+        // ========================================================
 
         if (acceptButton) {
 
@@ -457,17 +1893,25 @@ document.addEventListener(
                 function () {
 
                     if (acceptButton.disabled) {
+
                         return;
+
                     }
 
 
                     recordHumanDecision(
                         "ACCEPTED"
                     );
+
                 }
             );
+
         }
 
+
+        // ========================================================
+        // PAGE READY
+        // ========================================================
 
         console.log(
             `Finding Details loaded: ${findingId}`

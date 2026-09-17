@@ -24,7 +24,9 @@
 </head>
 
 
-<body>
+<body class="{% block body_class %}{% endblock %}">
+
+{% block page_shell %}
 
 <div class="app-shell">
 
@@ -233,6 +235,8 @@
 
 
 </div>
+
+{% endblock %}
 
 
 <!-- ==============================================================

@@ -24,6 +24,9 @@ uses real runtime evidence from the local DVWA lab.
 
 from __future__ import annotations
 
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
 from flask import (
     Flask,
     abort,
@@ -34,6 +37,8 @@ from flask import (
     url_for,
 )
 
+from app.analysis.analysis_service import run_static_analysis
+from app.analysis.finding_adapter import adapt_analysis_result
 from app.evidence_gate import evaluate_evidence
 
 from app.models.finding import (
@@ -65,99 +70,17 @@ FINDING_TYPE_LABELS = {
 
 
 # ======================================================================
-# PRELOADED FINDINGS
+# ANALYSIS RESULTS IN MEMORY
 #
-# These Finding objects represent the output that will eventually come
-# from Hassan's live LLM proposer.
-#
-# They are real Finding model objects, but are currently created manually
-# so the downstream verification pipeline can be implemented and tested.
+# Findings are populated by the configured analysis provider after the user
+# starts an analysis. In the current Gabriel branch the default provider is
+# MOCK. The same Finding model and downstream verification flow are preserved.
 # ======================================================================
 
 FINDINGS = {}
-
-
-sql_finding = Finding(
-    finding_id="F-0001",
-    finding_type=FindingType.SQL_INJECTION,
-    endpoint="/vulnerabilities/sqli/",
-    parameter="id",
-    method="GET",
-    explanation=(
-        "A preloaded candidate finding identifies possible SQL "
-        "injection in the id parameter. The live LLM proposer is not "
-        "connected to the web application yet."
-    ),
-)
-
-FINDINGS[
-    sql_finding.finding_id
-] = sql_finding
-
-
-xss_finding = Finding(
-    finding_id="F-0002",
-    finding_type=FindingType.XSS,
-    endpoint="/vulnerabilities/xss_r/",
-    parameter="name",
-    method="GET",
-    explanation=(
-        "A preloaded candidate finding identifies possible "
-        "cross-site scripting in the name parameter. XSS dynamic "
-        "verification is outside the current SQL Injection MVP."
-    ),
-)
-
-FINDINGS[
-    xss_finding.finding_id
-] = xss_finding
-
-
-# ======================================================================
-# TEMPORARY METADATA
-#
-# These values are not part of Finding yet.
-#
-# We intentionally keep them separate instead of modifying Hassan's
-# Finding model without coordinating the common data contract.
-# ======================================================================
-
-FINDING_METADATA = {
-
-    "F-0001": {
-        "target":
-            "DVWA Test Environment",
-
-        "source_file":
-            "Preloaded / not connected",
-
-        "proposed_cwe":
-            "CWE-89",
-
-        "suggested_severity":
-            "HIGH",
-
-        "proposal_source":
-            "PRELOADED",
-    },
-
-    "F-0002": {
-        "target":
-            "DVWA Test Environment",
-
-        "source_file":
-            "Preloaded / not connected",
-
-        "proposed_cwe":
-            "CWE-79",
-
-        "suggested_severity":
-            "MEDIUM",
-
-        "proposal_source":
-            "PRELOADED",
-    },
-}
+FINDING_METADATA = {}
+ANALYSES = {}
+LATEST_ANALYSIS_ID = None
 
 
 # ======================================================================
@@ -175,7 +98,6 @@ EVIDENCE_BY_FINDING = {}
 REVIEW_BY_FINDING = {
 
     finding_id: {
-        "reviewer_cwe": "",
         "final_severity": "",
         "reviewer_comment": "",
         "human_decision": None,
@@ -190,7 +112,6 @@ REVIEW_BY_FINDING = {
 # ======================================================================
 
 ALLOWED_REVIEW_FIELDS = {
-    "reviewer_cwe",
     "final_severity",
     "reviewer_comment",
     "human_decision",
@@ -375,6 +296,17 @@ def build_evidence_tests(
                     f"{response.get('result_count')}"
                 ),
 
+            # Presentation-friendly fields used by finding_detail.html.
+            # The original technical response remains preserved above.
+            "result_count":
+                response.get("result_count"),
+
+            "status_code":
+                response.get("status_code"),
+
+            "database_error_detected":
+                bool(response.get("database_error_detected", False)),
+
             "observations": [],
         })
 
@@ -543,12 +475,6 @@ def build_view_model(
                 else {}
             ),
 
-        "reviewer_cwe":
-            review.get(
-                "reviewer_cwe",
-                "",
-            ),
-
         "final_severity":
             review.get(
                 "final_severity",
@@ -574,6 +500,33 @@ def build_view_model(
     }
 
 
+
+
+def register_analysis_result(analysis_result: dict) -> list[dict]:
+    """Replace the current proposal set with findings from one analysis run."""
+    global LATEST_ANALYSIS_ID
+
+    FINDINGS.clear()
+    FINDING_METADATA.clear()
+    EVIDENCE_BY_FINDING.clear()
+    REVIEW_BY_FINDING.clear()
+
+    for finding, metadata in adapt_analysis_result(analysis_result):
+        FINDINGS[finding.finding_id] = finding
+        FINDING_METADATA[finding.finding_id] = metadata
+        REVIEW_BY_FINDING[finding.finding_id] = {
+            "final_severity": "",
+            "reviewer_comment": "",
+            "human_decision": None,
+        }
+
+    analysis_id = analysis_result["analysis_id"]
+    ANALYSES[analysis_id] = analysis_result
+    LATEST_ANALYSIS_ID = analysis_id
+
+    return [build_view_model(finding) for finding in FINDINGS.values()]
+
+
 # ======================================================================
 # ROOT
 # ======================================================================
@@ -581,8 +534,81 @@ def build_view_model(
 @app.route("/")
 def home():
 
-    return redirect(
-        url_for("findings_list")
+    return render_template(
+        "home.html",
+        active_page="home",
+    )
+
+
+
+
+# ======================================================================
+# START STATIC ANALYSIS
+# ======================================================================
+
+@app.route("/analysis/static", methods=["POST"])
+def start_static_analysis():
+    source_file = request.files.get("source_file")
+    application_name = request.form.get("application_name", "").strip()
+    authorised = request.form.get("authorised") == "true"
+
+    if source_file is None or not source_file.filename:
+        return jsonify({"ok": False, "error": "A source file is required."}), 400
+
+    if not application_name:
+        return jsonify({"ok": False, "error": "Application name is required."}), 400
+
+    if not authorised:
+        return jsonify({"ok": False, "error": "Authorisation confirmation is required."}), 400
+
+    original_filename = Path(source_file.filename).name
+
+    try:
+        with TemporaryDirectory(prefix="eg_appsec_") as temp_dir:
+            source_path = Path(temp_dir) / original_filename
+            source_file.save(source_path)
+
+            analysis_result = run_static_analysis(
+                source_path=str(source_path),
+                original_filename=original_filename,
+                application_name=application_name,
+            )
+
+        findings = register_analysis_result(analysis_result)
+
+        return jsonify({
+            "ok": True,
+            "analysis_id": analysis_result["analysis_id"],
+            "provider": analysis_result["provider"],
+            "fixture_recognised": analysis_result.get("fixture_recognised", False),
+            "finding_count": len(findings),
+            "redirect_url": url_for(
+                "analysis_results",
+                analysis_id=analysis_result["analysis_id"],
+            ),
+        })
+    except Exception as error:
+        return jsonify({"ok": False, "error": str(error)}), 500
+
+
+@app.route("/analysis/<analysis_id>/results")
+def analysis_results(analysis_id):
+    analysis = ANALYSES.get(analysis_id)
+
+    if analysis is None:
+        abort(404)
+
+    findings = [
+        build_view_model(finding)
+        for finding in FINDINGS.values()
+        if FINDING_METADATA.get(finding.finding_id, {}).get("analysis_id") == analysis_id
+    ]
+
+    return render_template(
+        "analysis_results.html",
+        analysis=analysis,
+        findings=findings,
+        active_page="findings",
     )
 
 

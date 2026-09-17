@@ -199,142 +199,91 @@ Finding Proposed
 
 
         <!-- ======================================================
-             WORKFLOW
+             WORKFLOW NAVIGATION
+             Completed/available stages are navigable for inspection.
              ====================================================== -->
 
-        <section class="workflow">
+        <nav
+            class="workflow workflow-nav"
+            id="findingWorkflow"
+            aria-label="Finding workflow"
+            data-verification-complete="{{ 'true' if finding.verification_status == 'COMPLETED' else 'false' }}"
+            data-human-decision="{{ finding.human_decision or '' }}"
+        >
 
-
-            <!-- STEP 1 -->
-
-            <div class="workflow-step active">
-
-                <div class="workflow-circle">
-                    1
-                </div>
-
-                <strong>
-                    Proposal
-                </strong>
-
-                <span>
-                    {{ finding.llm_status }}
-                </span>
-
-            </div>
-
+            <button
+                type="button"
+                class="workflow-step workflow-stage is-complete"
+                data-workflow-stage="1"
+                data-workflow-target="ai-proposal"
+                aria-label="View LLM Proposal stage"
+            >
+                <div class="workflow-circle">1</div>
+                <strong>LLM Proposal</strong>
+                <span>{{ finding.llm_status }}</span>
+            </button>
 
             <div
-                class="
-                    workflow-line
-                    {% if finding.verification_status == 'COMPLETED' %}
-                    active-line
-                    {% endif %}
-                "
+                class="workflow-line {% if finding.verification_status == 'COMPLETED' %}is-complete{% endif %}"
+                data-workflow-line="1"
             ></div>
 
-
-            <!-- STEP 2 -->
-
-            <div
-                class="
-                    workflow-step
-                    {% if finding.verification_status == 'COMPLETED' %}
-                    active
-                    {% endif %}
-                "
+            <button
+                type="button"
+                class="workflow-step workflow-stage {% if finding.verification_status == 'COMPLETED' %}is-complete{% endif %}"
+                data-workflow-stage="2"
+                data-workflow-target="verification"
+                aria-label="View Verification stage"
             >
-
-                <div class="workflow-circle">
-                    2
-                </div>
-
-                <strong>
-                    Dynamic Verification
-                </strong>
-
-                <span>
-
-                    {{ finding.verification_status }}
-
-                </span>
-
-            </div>
-
+                <div class="workflow-circle">2</div>
+                <strong>Verification</strong>
+                <span>{{ finding.verification_status }}</span>
+            </button>
 
             <div
-                class="
-                    workflow-line
-                    {% if finding.human_decision %}
-                    active-line
-                    {% endif %}
-                "
+                class="workflow-line {% if finding.verification_status == 'COMPLETED' %}is-complete{% endif %}"
+                data-workflow-line="2"
             ></div>
 
-
-            <!-- STEP 3 -->
-
-            <div
-                class="
-                    workflow-step
-                    {% if finding.human_decision %}
-                    active
-                    {% endif %}
-                "
+            <button
+                type="button"
+                class="workflow-step workflow-stage {% if finding.verification_status == 'COMPLETED' %}is-available{% endif %}"
+                data-workflow-stage="3"
+                data-workflow-target="human-review"
+                aria-label="View Human Review stage"
+                {% if finding.verification_status != 'COMPLETED' %}disabled{% endif %}
             >
-
-                <div class="workflow-circle">
-                    3
-                </div>
-
-                <strong>
-                    Human Review
-                </strong>
-
+                <div class="workflow-circle">3</div>
+                <strong>Human Review</strong>
                 <span>
-
                     {% if finding.human_decision %}
-
                     {{ finding.human_decision }}
-
                     {% elif finding.verification_status == "COMPLETED" %}
-
                     READY
-
                     {% else %}
-
                     PENDING
-
                     {% endif %}
-
                 </span>
+            </button>
 
-            </div>
+            <div
+                class="workflow-line {% if finding.human_decision %}is-complete{% endif %}"
+                data-workflow-line="3"
+            ></div>
 
+            <button
+                type="button"
+                class="workflow-step workflow-stage"
+                data-workflow-stage="4"
+                aria-label="Report stage"
+                disabled
+            >
+                <div class="workflow-circle">4</div>
+                <strong>Report</strong>
+                <span>NOT GENERATED</span>
+            </button>
 
-            <div class="workflow-line"></div>
-
-
-            <!-- STEP 4 -->
-
-            <div class="workflow-step">
-
-                <div class="workflow-circle">
-                    4
-                </div>
-
-                <strong>
-                    Security Report
-                </strong>
-
-                <span>
-                    Not generated
-                </span>
-
-            </div>
-
-
-        </section>
+        </nav>
 
 
         <!-- ======================================================
@@ -348,815 +297,328 @@ Finding Proposed
                  PROPOSAL
                  ================================================== -->
 
-            <article class="panel llm-panel">
-
-
+            <article class="panel llm-panel" id="ai-proposal">
                 <div class="panel-header">
-
                     <div>
-
-                        <h3>
-                            Proposed Finding
-                        </h3>
-
-                        <p>
-                            Candidate only — not proof.
-                        </p>
-
+                        <h3>LLM Proposed Finding</h3>
+                        <p>Candidate only — not proof.</p>
                     </div>
-
-
-                    <span class="status proposed">
-
-                        {{ finding.llm_status }}
-
-                    </span>
-
+                    <span class="status proposed">{{ finding.llm_status }}</span>
                 </div>
 
-
-                <div class="analysis-box">
-
-                    {{ finding.reason }}
-
+                <div class="proposal-heading">
+                    <div>
+                        <span class="eyebrow">POTENTIAL VULNERABILITY</span>
+                        <h4>{{ finding.finding_type }}</h4>
+                    </div>
+                    <span class="proposal-source-badge">{{ finding.proposal_source }}</span>
                 </div>
 
+                <div class="analysis-box">{{ finding.reason }}</div>
 
-                <div class="analysis-list">
-
-                    <div>
-                        ✓ Vulnerability class:
-                        {{ finding.finding_type }}
+                <div class="proposal-facts proposal-location-facts">
+                    <div class="proposal-fact">
+                        <span>Endpoint</span>
+                        <strong>{{ finding.endpoint }}</strong>
                     </div>
-
-                    <div>
-                        ✓ Parameter:
-                        {{ finding.parameter }}
+                    <div class="proposal-fact">
+                        <span>Parameter</span>
+                        <strong>{{ finding.parameter }}</strong>
                     </div>
-
-                    <div>
-                        ✓ Proposed CWE:
-                        {{ finding.proposed_cwe }}
+                    <div class="proposal-fact">
+                        <span>Method</span>
+                        <strong>{{ finding.method }}</strong>
                     </div>
-
-                    <div>
-                        ✓ Method:
-                        {{ finding.method }}
-                    </div>
-
                 </div>
 
-
-                <div class="detail-cards">
-
-
-                    <div>
-
-                        <span>
-                            Endpoint
-                        </span>
-
-                        <strong>
-                            {{ finding.endpoint }}
-                        </strong>
-
+                <section class="llm-assessment-block" aria-label="LLM assessment">
+                    <div class="llm-assessment-heading">
+                        <div>
+                            <span class="eyebrow">LLM ASSESSMENT</span>
+                            <h4>Proposed classification</h4>
+                        </div>
+                        <span class="proposal-readonly-badge">READ ONLY</span>
                     </div>
 
-
-                    <div>
-
-                        <span>
-                            Target
-                        </span>
-
-                        <strong>
-                            {{ finding.target }}
-                        </strong>
-
+                    <div class="llm-assessment-grid">
+                        <div class="llm-assessment-item">
+                            <span>Proposed CWE</span>
+                            <strong>{{ finding.proposed_cwe }}</strong>
+                            <small>Weakness class proposed by the LLM</small>
+                        </div>
+                        <div class="llm-assessment-item">
+                            <span>Suggested Severity</span>
+                            <strong>{{ finding.suggested_severity }}</strong>
+                            <small>Suggestion only — not final severity</small>
+                        </div>
                     </div>
 
-
-                    <div>
-
-                        <span>
-                            Proposal Source
-                        </span>
-
-                        <strong>
-                            {{ finding.proposal_source }}
-                        </strong>
-
+                    <div class="llm-context-row">
+                        <div>
+                            <span>Target</span>
+                            <strong>{{ finding.target }}</strong>
+                        </div>
+                        <div>
+                            <span>Proposal Source</span>
+                            <strong>{{ finding.proposal_source }}</strong>
+                        </div>
                     </div>
+                </section>
 
-
+                <div class="proposal-boundary-note">
+                    <span class="eyebrow">PROPOSAL BOUNDARY</span>
+                    <p>This is an LLM-generated candidate. It requires independent verification and does not represent the reviewer’s final decision.</p>
                 </div>
-
-
             </article>
-
 
             <!-- ==================================================
                  VERIFICATION EVIDENCE
                  ================================================== -->
 
-            <article class="panel evidence-panel">
-
-
+            <article class="panel evidence-panel" id="verification">
                 <div class="panel-header">
-
-
                     <div>
-
-                        <h3>
-                            Deterministic Verification
-                        </h3>
-
-                        <p>
-                            Independent runtime evidence
-                        </p>
-
+                        <h3>Independent Verification</h3>
+                        <p>Evidence is collected independently from the LLM proposal.</p>
                     </div>
-
-
-                    <span class="status pending-status">
-
-                        {{ finding.verification_status }}
-
-                    </span>
-
-
+                    <span class="status pending-status">{{ finding.verification_status }}</span>
                 </div>
-
-
-                <!-- ==============================================
-                     BEFORE VERIFICATION
-                     ============================================== -->
 
                 {% if finding.verification_status != "COMPLETED" %}
-
-
-                <div class="pending-evidence">
-
-
+                <div class="verification-ready">
                     {% if finding.verification_supported %}
-
-
-                    <h4>
-                        Verification has not been executed yet.
-                    </h4>
-
-
-                    <p>
-
-                        The verifier will authenticate to the local
-                        DVWA lab and perform a baseline request,
-                        TRUE-condition request and FALSE-condition
-                        request.
-
-                    </p>
-
-
-                    <div class="placeholder-block">
-
-                        Baseline
-
-                        <span>
-                            Waiting for verification
-                        </span>
-
+                    <div class="verification-ready-icon">✓</div>
+                    <div>
+                        <span class="eyebrow">READY TO VERIFY</span>
+                        <h4>Run controlled SQL behaviour checks</h4>
+                        <p>The verifier will run a baseline request, a TRUE-condition test and a FALSE-condition test. The LLM does not decide this result.</p>
                     </div>
-
-
-                    <div class="placeholder-block">
-
-                        TRUE-condition test
-
-                        <span>
-                            Waiting for verification
-                        </span>
-
-                    </div>
-
-
-                    <div class="placeholder-block">
-
-                        FALSE-condition test
-
-                        <span>
-                            Waiting for verification
-                        </span>
-
-                    </div>
-
-
-                    <button
-                        id="runVerificationButton"
-                        class="accept-button"
-                        style="
-                            margin-top: 16px;
-                            padding: 11px 16px;
-                            border-radius: 8px;
-                            background: #102233;
-                            cursor: pointer;
-                        "
-                    >
-                        Run Verification
-                    </button>
-
-
-                    <p
-                        id="verificationMessage"
-                        class="risk-note"
-                    ></p>
-
-
+                    <button id="runVerificationButton" class="verification-action">Run Independent Verification</button>
+                    <p id="verificationMessage" class="verification-message"></p>
                     {% else %}
-
-
-                    <h4>
-                        Verifier not implemented for this finding type.
-                    </h4>
-
-
-                    <p>
-
-                        The current MVP verifier supports SQL Injection
-                        only. This finding remains PROPOSED.
-
-                    </p>
-
-
-                    <button
-                        disabled
-                        class="disabled-action"
-                    >
-                        Verification unavailable
-                    </button>
-
-
+                    <div class="verification-ready-icon muted-icon">!</div>
+                    <div>
+                        <span class="eyebrow">NOT AVAILABLE</span>
+                        <h4>Verification capability is not implemented for this finding type</h4>
+                        <p>No evidence will be fabricated for an unsupported finding.</p>
+                    </div>
+                    <button disabled class="verification-action disabled-action">Verification unavailable</button>
                     {% endif %}
-
-
                 </div>
-
-
-                <!-- ==============================================
-                     AFTER VERIFICATION
-                     ============================================== -->
 
                 {% else %}
-
-
-                <div
-                    style="
-                        margin-bottom: 16px;
-                        padding: 14px;
-                        border: 1px solid #1b4b66;
-                        border-radius: 9px;
-                        background: #071a2a;
-                    "
-                >
-
-
-                    <span
-                        style="
-                            display: block;
-                            color: #6ba7d4;
-                            font-size: 12px;
-                            margin-bottom: 7px;
-                        "
-                    >
-                        EVIDENCE GATE RESULT
-                    </span>
-
-
-                    <strong
-                        style="
-                            font-size: 18px;
-                        "
-                    >
-
-                        {{ finding.evidence_gate_result }}
-
-                    </strong>
-
-
-                    {% if finding.evidence_summary %}
-
-                    <p
-                        style="
-                            color: #9eb5ca;
-                            line-height: 1.5;
-                        "
-                    >
-
-                        {{ finding.evidence_summary }}
-
+                <div class="verification-verdict">
+                    <div>
+                        <span class="eyebrow">VERIFICATION RESULT</span>
+                        <strong class="verification-result">{{ finding.evidence_gate_result }}</strong>
+                    </div>
+                    <p>
+                        {% if finding.evidence_gate_result == "PROVED" %}
+                        Independent evidence supports the proposed finding.
+                        {% elif finding.evidence_gate_result == "REFUTED" %}
+                        Independent evidence does not support the proposed finding.
+                        {% else %}
+                        The collected evidence is inconclusive and requires human interpretation.
+                        {% endif %}
                     </p>
-
-                    {% endif %}
-
-
-                    {% if finding.run_id %}
-
-                    <small
-                        style="
-                            display: block;
-                            color: #66859f;
-                        "
-                    >
-
-                        Run ID:
-                        {{ finding.run_id }}
-
-                    </small>
-
-                    {% endif %}
-
-
                 </div>
 
-
-                <!-- ==============================================
-                     SIGNALS
-                     ============================================== -->
-
-                <div
-                    class="detail-cards"
-                    style="
-                        margin-bottom: 16px;
-                    "
-                >
-
-
+                <div class="evidence-section-heading">
                     <div>
-
-                        <span>
-                            Baseline Records
-                        </span>
-
-                        <strong>
-                            {{ finding.signals.baseline_result_count }}
-                        </strong>
-
+                        <span class="eyebrow">WHAT WAS TESTED</span>
+                        <h4>{{ finding.evidence | length }} independent evidence check{% if finding.evidence | length != 1 %}s{% endif %}</h4>
                     </div>
-
-
-                    <div>
-
-                        <span>
-                            TRUE Records
-                        </span>
-
-                        <strong>
-                            {{ finding.signals.true_result_count }}
-                        </strong>
-
-                    </div>
-
-
-                    <div>
-
-                        <span>
-                            FALSE Records
-                        </span>
-
-                        <strong>
-                            {{ finding.signals.false_result_count }}
-                        </strong>
-
-                    </div>
-
-
                 </div>
 
-
-                <!-- ==============================================
-                     INDIVIDUAL TESTS
-                     ============================================== -->
-
-                {% for test in finding.evidence %}
-
-
-                <div
-                    style="
-                        margin-top: 14px;
-                        border: 1px solid #1a4468;
-                        border-radius: 9px;
-                        overflow: hidden;
-                    "
-                >
-
-
-                    <div
-                        style="
-                            padding: 12px 14px;
-                            background: #0a2032;
-                            border-bottom: 1px solid #173b54;
-                        "
-                    >
-
-                        <small
-                            style="
-                                color: #66b8ed;
-                            "
-                        >
-
-                            {{ test.test_id }}
-
-                        </small>
-
-
-                        <strong
-                            style="
-                                display: block;
-                                margin-top: 4px;
-                            "
-                        >
-
-                            {{ test.name }}
-
-                        </strong>
-
+                <div class="verified-finding-context">
+                    <span class="eyebrow">FINDING BEING VERIFIED</span>
+                    <div class="verified-finding-main">
+                        <strong>{{ finding.finding_type }}</strong>
+                        <span>{{ finding.method }} {{ finding.endpoint }}</span>
+                        <span>Parameter: <strong>{{ finding.parameter }}</strong></span>
                     </div>
-
-
-                    <div
-                        style="
-                            padding: 14px;
-                        "
-                    >
-
-
-                        <span
-                            style="
-                                display: block;
-                                color: #7295b7;
-                                font-size: 12px;
-                                margin-bottom: 6px;
-                            "
-                        >
-                            Payload
-                        </span>
-
-
-                        <pre
-                            style="
-                                white-space: pre-wrap;
-                                word-break: break-word;
-                                padding: 10px;
-                                background: #04111d;
-                                border-radius: 7px;
-                                overflow-x: auto;
-                            "
-                        >{{ test.payload }}</pre>
-
-
-                        <span
-                            style="
-                                display: block;
-                                color: #7295b7;
-                                font-size: 12px;
-                                margin: 12px 0 6px;
-                            "
-                        >
-                            Request
-                        </span>
-
-
-                        <pre
-                            style="
-                                white-space: pre-wrap;
-                                word-break: break-word;
-                                padding: 10px;
-                                background: #04111d;
-                                border-radius: 7px;
-                                overflow-x: auto;
-                            "
-                        >{{ test.request }}</pre>
-
-
-                        <span
-                            style="
-                                display: block;
-                                color: #7295b7;
-                                font-size: 12px;
-                                margin: 12px 0 6px;
-                            "
-                        >
-                            Response Evidence
-                        </span>
-
-
-                        <pre
-                            style="
-                                max-height: 260px;
-                                overflow: auto;
-                                white-space: pre-wrap;
-                                word-break: break-word;
-                                padding: 10px;
-                                background: #04111d;
-                                border-radius: 7px;
-                            "
-                        >{{ test.response }}</pre>
-
-
-                    </div>
-
-
+                    <p>The Oracle is testing whether controlled changes to this parameter produce behaviour consistent with the proposed finding.</p>
                 </div>
 
+                <div class="evidence-cards">
+                    {% for test in finding.evidence %}
+                    <article class="evidence-card">
+                        <div class="evidence-card-top">
+                            <span class="evidence-number">EVIDENCE {{ '%02d'|format(loop.index) }}</span>
+                            <span class="evidence-observed">OBSERVED</span>
+                        </div>
+                        <h4>{{ test.name }}</h4>
+                        <p class="evidence-purpose">
+                            {% if loop.index == 1 %}
+                            Establishes normal application behaviour before SQL conditions are introduced.
+                            {% elif loop.index == 2 %}
+                            Checks whether a controlled TRUE SQL condition changes the returned result set.
+                            {% else %}
+                            Checks whether a controlled FALSE SQL condition changes the returned result set.
+                            {% endif %}
+                        </p>
+                        <div class="evidence-result-row">
+                            <span>Application result</span>
+                            <strong>{{ test.result_count if test.result_count is not none else 'N/A' }}</strong>
+                            <small>matching record{% if test.result_count != 1 %}s{% endif %} returned</small>
+                        </div>
+                        <div class="evidence-mini-grid">
+                            <div title="HTTP response status returned by the target application.">
+                                <span>HTTP response</span>
+                                <strong>{{ test.status_code if test.status_code is not none else 'N/A' }}{% if test.status_code == 200 %} OK{% elif test.status_code == 404 %} NOT FOUND{% endif %}</strong>
+                            </div>
+                            <div title="Whether the response contained a recognisable database error message. A NO result does not by itself rule out SQL Injection.">
+                                <span>Database error</span>
+                                <strong>{{ 'DETECTED' if test.database_error_detected else 'NOT DETECTED' }}</strong>
+                            </div>
+                        </div>
+                        <p class="evidence-metric-help">HTTP shows how the target responded. Database error reports whether an explicit DB error signature was observed.</p>
+                    </article>
+                    {% endfor %}
+                </div>
 
-                {% endfor %}
+                <div class="verification-conclusion">
+                    <span class="eyebrow">VERIFICATION CONCLUSION</span>
+                    <h4>
+                        {% if finding.evidence_gate_result == "PROVED" %}
+                        Behavioural evidence supports the SQL Injection proposal
+                        {% elif finding.evidence_gate_result == "REFUTED" %}
+                        Behavioural evidence does not support the SQL Injection proposal
+                        {% else %}
+                        Evidence is insufficient for a deterministic conclusion
+                        {% endif %}
+                    </h4>
+                    <p>{{ finding.evidence_summary }}</p>
+                </div>
 
+                <details class="technical-evidence">
+                    <summary>
+                        <strong>View technical evidence</strong>
+                        <span>Requests, payloads and raw response excerpts</span>
+                    </summary>
+                    <div class="technical-evidence-content">
+                        {% for test in finding.evidence %}
+                        <article class="technical-test">
+                            <header><div><small>{{ test.test_id }}</small><strong>{{ test.name }}</strong></div></header>
+                            <div class="technical-field"><span>Payload</span><pre>{{ test.payload }}</pre></div>
+                            <div class="technical-field"><span>Request</span><pre>{{ test.request }}</pre></div>
+                            <details class="raw-response"><summary>View raw response excerpt</summary><pre>{{ test.response }}</pre></details>
+                        </article>
+                        {% endfor %}
+                        {% if finding.run_id %}<div class="evidence-run-meta"><span>Run ID</span><strong>{{ finding.run_id }}</strong></div>{% endif %}
+                    </div>
+                </details>
 
-                <button
-                    id="runVerificationButton"
-                    class="review-button"
-                    style="
-                        margin-top: 16px;
-                        padding: 10px 14px;
-                        border-radius: 8px;
-                        background: #102233;
-                        cursor: pointer;
-                    "
-                >
-                    Run Verification Again
-                </button>
-
-
-                <p
-                    id="verificationMessage"
-                    class="risk-note"
-                ></p>
-
-
+                <div class="verification-footer">
+                    <button id="runVerificationButton" class="verification-action secondary-verification-action">Run Verification Again</button>
+                    <p id="verificationMessage" class="verification-message"></p>
+                </div>
                 {% endif %}
-
-
             </article>
 
-
         </section>
-
 
         <!-- ======================================================
-             GATE + REVIEW ASSESSMENT
+             EVIDENCE GATE + REVIEWER ASSESSMENT
              ====================================================== -->
 
-        <section class="lower-grid">
-
-
-            <!-- EVIDENCE GATE -->
-
-            <article class="panel">
-
-
+        <section class="decision-grid">
+            <article class="panel gate-panel">
                 <div class="panel-header">
-
-
                     <div>
-
-                        <h3>
-                            Evidence Gate
-                        </h3>
-
-                        <p>
-                            Deterministic result — not human decision.
-                        </p>
-
+                        <h3>Evidence Gate</h3>
+                        <p>Deterministic classification based only on independent evidence.</p>
                     </div>
-
-
-                    <span class="status pending-status">
-
-                        {{ finding.evidence_gate_result }}
-
-                    </span>
-
-
+                    <span class="status pending-status">{{ finding.evidence_gate_result }}</span>
                 </div>
-
 
                 {% if finding.verification_status == "COMPLETED" %}
-
-
-                <p class="muted">
-
-                    Independent verification completed.
-
-                    The Evidence Gate classified this proposed finding as
-
-                    <strong>
-                        {{ finding.evidence_gate_result }}
-                    </strong>.
-
-                </p>
-
-
-                <p class="risk-note">
-
-                    Database error observed:
-                    {{ finding.signals.database_error_detected }}
-
-                    <br>
-
-                    Behaviour changed:
-                    {{ finding.signals.behaviour_changed }}
-
-                    <br>
-
-                    TRUE/FALSE difference:
-                    {{ finding.signals.true_false_difference }}
-
-                </p>
-
-
+                <div class="gate-explanation">
+                    <span class="eyebrow">GATE INTERPRETATION</span>
+                    <h4>
+                        {% if finding.evidence_gate_result == "PROVED" %}
+                        Evidence threshold satisfied
+                        {% elif finding.evidence_gate_result == "REFUTED" %}
+                        Evidence does not support the proposal
+                        {% else %}
+                        Human interpretation required
+                        {% endif %}
+                    </h4>
+                    <p>
+                        {% if finding.evidence_gate_result == "PROVED" %}
+                        The independent verification produced sufficient deterministic evidence to support the proposed finding.
+                        {% elif finding.evidence_gate_result == "REFUTED" %}
+                        The independent verification did not produce evidence supporting the proposed finding.
+                        {% else %}
+                        The independent verification completed, but the available signals are not sufficient to prove or refute the proposal automatically.
+                        {% endif %}
+                    </p>
+                </div>
+                <details class="gate-signals">
+                    <summary>View technical gate signals</summary>
+                    <div class="gate-signal-grid">
+                        <div><span>Database error observed</span><strong>{{ finding.signals.database_error_detected }}</strong></div>
+                        <div><span>Behaviour changed</span><strong>{{ finding.signals.behaviour_changed }}</strong></div>
+                        <div><span>TRUE/FALSE difference</span><strong>{{ finding.signals.true_false_difference }}</strong></div>
+                    </div>
+                </details>
                 {% else %}
-
-
-                <p class="muted">
-
-                    No deterministic verification result is available.
-                    The finding remains only a proposed candidate.
-
-                </p>
-
-
+                <div class="gate-explanation pending-gate">
+                    <span class="eyebrow">WAITING FOR EVIDENCE</span>
+                    <h4>No gate decision yet</h4>
+                    <p>Independent verification must complete before the Evidence Gate can classify this proposal.</p>
+                </div>
                 {% endif %}
-
-
             </article>
-
-
-            <!-- REVIEWER ASSESSMENT -->
 
             <article class="panel reviewer-panel">
-
-
                 <div class="panel-header">
-
-
                     <div>
-
-                        <h3>
-                            Reviewer Assessment
-                        </h3>
-
-                        <p>
-                            Reviewer values never overwrite the original proposal.
-                        </p>
-
+                        <h3>Reviewer Assessment</h3>
+                        <p>Human judgement remains separate from the LLM proposal and Evidence Gate.</p>
+                    </div>
+                    <span class="status review-status">{% if finding.human_decision %}{{ finding.human_decision }}{% else %}NOT REVIEWED{% endif %}</span>
+                </div>
+                <div class="severity-comparison">
+                    <div class="severity-comparison-heading">
+                        <span class="eyebrow">SEVERITY ASSESSMENT</span>
+                        <p>Compare the LLM suggestion with the reviewer’s independent final assessment.</p>
                     </div>
 
-
-                    <span class="status review-status">
-
-                        {% if finding.human_decision %}
-
-                        {{ finding.human_decision }}
-
-                        {% else %}
-
-                        NOT REVIEWED
-
-                        {% endif %}
-
-                    </span>
-
-
-                </div>
-
-
-                <div class="reviewer-grid">
-
-
-                    <div class="review-field">
-
-                        <label>
-                            Suggested Severity
-                        </label>
-
-                        <div class="readonly-value">
-
-                            {{ finding.suggested_severity }}
-
+                    <div class="severity-comparison-grid">
+                        <div class="severity-side llm-severity-side">
+                            <div class="severity-side-label">
+                                <span>LLM Suggested Severity</span>
+                                <span class="readonly-chip">READ ONLY</span>
+                            </div>
+                            <strong>{{ finding.suggested_severity }}</strong>
+                            <small>Original LLM suggestion. This value is preserved and cannot be changed by the reviewer.</small>
                         </div>
 
-                    </div>
+                        <div class="severity-compare-arrow" aria-hidden="true">→</div>
 
-
-                    <div class="review-field">
-
-                        <label for="finalSeverity">
-                            Final Severity
-                        </label>
-
-                        <select id="finalSeverity">
-
-                            <option
-                                value=""
-                                {% if not finding.final_severity %}
-                                selected
-                                {% endif %}
-                            >
-                                Not assigned
-                            </option>
-
-                            <option
-                                value="LOW"
-                                {% if finding.final_severity == "LOW" %}
-                                selected
-                                {% endif %}
-                            >
-                                Low
-                            </option>
-
-                            <option
-                                value="MEDIUM"
-                                {% if finding.final_severity == "MEDIUM" %}
-                                selected
-                                {% endif %}
-                            >
-                                Medium
-                            </option>
-
-                            <option
-                                value="HIGH"
-                                {% if finding.final_severity == "HIGH" %}
-                                selected
-                                {% endif %}
-                            >
-                                High
-                            </option>
-
-                            <option
-                                value="CRITICAL"
-                                {% if finding.final_severity == "CRITICAL" %}
-                                selected
-                                {% endif %}
-                            >
-                                Critical
-                            </option>
-
-                        </select>
-
-                    </div>
-
-
-                    <div class="review-field">
-
-                        <label>
-                            Proposed CWE
-                        </label>
-
-                        <div class="readonly-value">
-
-                            {{ finding.proposed_cwe }}
-
+                        <div class="severity-side reviewer-severity-side">
+                            <label for="finalSeverity">Reviewer Final Severity</label>
+                            <select id="finalSeverity">
+                                <option value="" {% if not finding.final_severity %}selected{% endif %}>Not assigned</option>
+                                <option value="LOW" {% if finding.final_severity == "LOW" %}selected{% endif %}>Low</option>
+                                <option value="MEDIUM" {% if finding.final_severity == "MEDIUM" %}selected{% endif %}>Medium</option>
+                                <option value="HIGH" {% if finding.final_severity == "HIGH" %}selected{% endif %}>High</option>
+                                <option value="CRITICAL" {% if finding.final_severity == "CRITICAL" %}selected{% endif %}>Critical</option>
+                            </select>
+                            <small>Independent human assessment. It does not overwrite the original LLM suggestion.</small>
                         </div>
-
                     </div>
-
-
-                    <div class="review-field">
-
-                        <label for="reviewerCwe">
-                            Reviewer CWE
-                        </label>
-
-                        <input
-                            id="reviewerCwe"
-                            type="text"
-                            placeholder="e.g. CWE-89"
-                            value="{{ finding.reviewer_cwe }}"
-                        >
-
-                    </div>
-
-
                 </div>
-
-
-                <p class="risk-note">
-
-                    Review data is currently stored in Flask memory
-                    and resets when the development server restarts.
-
-                </p>
-
-
+                <p class="storage-note">Review data is currently stored in Flask memory and resets when the development server restarts.</p>
             </article>
-
-
         </section>
-
 
         <!-- ======================================================
              HUMAN DECISION
              ====================================================== -->
 
-        <section class="human-review-section">
+        <section class="human-review-section" id="human-review">
 
 
             <div class="review-comment">
