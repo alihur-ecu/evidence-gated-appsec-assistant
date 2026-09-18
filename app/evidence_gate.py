@@ -4,23 +4,77 @@ from pathlib import Path
 
 def evaluate_evidence(evidence):
     """
-    Decide whether the finding has enough evidence.
+    Evaluate deterministic runtime evidence.
+
+    The LLM does not make this decision.
+
+    Possible results:
+    - PROVED
+    - REFUTED
+    - NEEDS_HUMAN
     """
 
-    runtime_evidence = evidence.get("runtime_evidence", False)
-    database_error_detected = evidence.get(
-        "database_error_detected",
+    signals = evidence.get("signals", {})
+
+    all_requests_successful = signals.get(
+        "all_requests_successful",
         False
     )
 
-    if runtime_evidence and database_error_detected:
-        return "CONFIRMED"
+    behaviour_changed = signals.get(
+        "behaviour_changed",
+        False
+    )
 
-    elif runtime_evidence or database_error_detected:
-        return "NEEDS_MORE_EVIDENCE"
+    true_false_difference = signals.get(
+        "true_false_difference",
+        False
+    )
 
-    else:
-        return "REJECTED"
+    true_expands_results = signals.get(
+        "true_expands_results",
+        False
+    )
+
+    false_reduces_results = signals.get(
+        "false_reduces_results",
+        False
+    )
+
+    # ---------------------------------------
+    # 1. Incomplete evidence
+    # ---------------------------------------
+
+    if not all_requests_successful:
+        return "NEEDS_HUMAN"
+
+    # ---------------------------------------
+    # 2. Strong evidence supporting SQLi
+    # ---------------------------------------
+
+    if (
+        behaviour_changed
+        and true_false_difference
+        and true_expands_results
+        and false_reduces_results
+    ):
+        return "PROVED"
+
+    # ---------------------------------------
+    # 3. No meaningful behavioural difference
+    # ---------------------------------------
+
+    if (
+        not behaviour_changed
+        and not true_false_difference
+    ):
+        return "REFUTED"
+
+    # ---------------------------------------
+    # 4. Mixed or ambiguous evidence
+    # ---------------------------------------
+
+    return "NEEDS_HUMAN"
 
 
 def load_latest_evidence():
@@ -47,8 +101,8 @@ def load_latest_evidence():
     with latest_file.open(
         "r",
         encoding="utf-8"
-    ) as f:
-        evidence = json.load(f)
+    ) as file:
+        evidence = json.load(file)
 
     return evidence, latest_file
 
@@ -59,13 +113,66 @@ if __name__ == "__main__":
 
     decision = evaluate_evidence(evidence)
 
+    signals = evidence.get("signals", {})
+
     print("\nEVIDENCE GATE RESULT")
-    print(f"Evidence file: {evidence_file}")
-    print(f"Finding type: {evidence.get('finding_type')}")
-    print(f"Parameter: {evidence.get('parameter')}")
-    print(f"Runtime evidence: {evidence.get('runtime_evidence')}")
+    print("--------------------------------")
+
     print(
-        "Database error detected:",
-        evidence.get("database_error_detected")
+        f"Evidence file: "
+        f"{evidence_file}"
     )
-    print(f"Decision: {decision}")
+
+    print(
+        f"Finding ID: "
+        f"{evidence.get('finding_id')}"
+    )
+
+    print(
+        f"Finding type: "
+        f"{evidence.get('finding_type')}"
+    )
+
+    print(
+        f"Parameter: "
+        f"{evidence.get('parameter')}"
+    )
+
+    print(
+        f"Baseline result: "
+        f"{signals.get('baseline_result_count')}"
+    )
+
+    print(
+        f"TRUE result: "
+        f"{signals.get('true_result_count')}"
+    )
+
+    print(
+        f"FALSE result: "
+        f"{signals.get('false_result_count')}"
+    )
+
+    print(
+        f"Behaviour changed: "
+        f"{signals.get('behaviour_changed')}"
+    )
+
+    print(
+        f"TRUE/FALSE difference: "
+        f"{signals.get('true_false_difference')}"
+    )
+
+    print(
+        f"TRUE expands results: "
+        f"{signals.get('true_expands_results')}"
+    )
+
+    print(
+        f"FALSE reduces results: "
+        f"{signals.get('false_reduces_results')}"
+    )
+
+    print(
+        f"\nDecision: {decision}"
+    )
