@@ -23,9 +23,14 @@ class Finding(BaseModel):
         description="Source code file containing the issue"
     )
 
-    line_number: Optional[str] = Field(
-        default="",
-        description="Line number where vulnerability exists"
+    line_start: Optional[int] = Field(
+        default=None,
+        description="Line number where the issue starts"
+    )
+
+    line_end: Optional[int] = Field(
+        default=None,
+        description="Line number where the issue ends"
     )
 
     parameter: Optional[str] = Field(
@@ -33,7 +38,7 @@ class Finding(BaseModel):
         description="Affected input parameter"
     )
 
-    why_vulnerable: str = Field(
+    description: str = Field(
         default="",
         description="Explanation of why the code is vulnerable"
     )
@@ -55,9 +60,10 @@ class Finding(BaseModel):
                 "finding_id": "FINDING-SQLI-001",
                 "vulnerability": "SQL Injection",
                 "file_path": "vulnerabilities/sqli/source/low.php",
-                "line_number": "5",
+                "line_start": 5,
+                "line_end": 7,
                 "parameter": "id",
-                "why_vulnerable": "User input is directly concatenated into SQL query",
+                "description": "User input is directly concatenated into SQL query",
                 "confidence": 95,
                 "status": "PROPOSED"
             }
