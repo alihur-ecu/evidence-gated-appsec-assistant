@@ -1,0 +1,134 @@
+[
+  {
+    "finding_id": "FINDING-001",
+    "vulnerability": "Potential SQL Injection",
+    "file_path": "C:\\Users\\ZUMAL\\Documents\\DVWA\\vulnerabilities\\sqli\\source\\low.php",
+    "line_start": 10,
+    "line_end": 11,
+    "parameter": "id",
+    "description": "User input from $_REQUEST['id'] is directly interpolated into the MySQL query string without parameterization or escaping, potentially allowing SQL injection.",
+    "confidence": 95,
+    "status": "PROPOSED"
+  },
+  {
+    "finding_id": "FINDING-002",
+    "vulnerability": "Potential SQL Injection",
+    "file_path": "C:\\Users\\ZUMAL\\Documents\\DVWA\\vulnerabilities\\sqli\\source\\low.php",
+    "line_start": 31,
+    "line_end": 34,
+    "parameter": "id",
+    "description": "User input from $_REQUEST['id'] is directly interpolated into the SQLite query string without parameterization or escaping, potentially allowing SQL injection.",
+    "confidence": 95,
+    "status": "PROPOSED"
+  },
+  {
+    "finding_id": "FINDING-003",
+    "vulnerability": "Potential Reflected Cross-Site Scripting (XSS)",
+    "file_path": "C:\\Users\\ZUMAL\\Documents\\DVWA\\vulnerabilities\\sqli\\source\\low.php",
+    "line_start": 20,
+    "line_end": 20,
+    "parameter": "id",
+    "description": "User input from $_REQUEST['id'] is directly concatenated into the HTML response string without contextual output encoding, potentially allowing cross-site scripting.",
+    "confidence": 90,
+    "status": "PROPOSED"
+  },
+  {
+    "finding_id": "FINDING-004",
+    "vulnerability": "Potential Reflected Cross-Site Scripting (XSS)",
+    "file_path": "C:\\Users\\ZUMAL\\Documents\\DVWA\\vulnerabilities\\sqli\\source\\low.php",
+    "line_start": 47,
+    "line_end": 47,
+    "parameter": "id",
+    "description": "User input from $_REQUEST['id'] is directly concatenated into the HTML response string in the SQLite execution path without contextual output encoding, potentially allowing cross-site scripting.",
+    "confidence": 90,
+    "status": "PROPOSED"
+  },
+  {
+    "finding_id": "FINDING-001",
+    "vulnerability": "Potential SQL Injection",
+    "file_path": "C:\\Users\\ZUMAL\\Documents\\DVWA\\vulnerabilities\\sqli\\source\\medium.php",
+    "line_start": 5,
+    "line_end": 12,
+    "parameter": "id",
+    "description": "User input from $_POST['id'] is passed to mysqli_real_escape_string, but it is concatenated into an unquoted integer field in the SQL query ($query = \"... WHERE user_id = $id;\"). Because the variable is not enclosed in quotes within the query syntax, string escaping functions do not prevent SQL injection.",
+    "confidence": 95,
+    "status": "PROPOSED"
+  },
+  {
+    "finding_id": "FINDING-002",
+    "vulnerability": "Potential SQL Injection",
+    "file_path": "C:\\Users\\ZUMAL\\Documents\\DVWA\\vulnerabilities\\sqli\\source\\medium.php",
+    "line_start": 27,
+    "line_end": 30,
+    "parameter": "id",
+    "description": "User input is directly concatenated into the SQLite query string without parameterized queries or appropriate SQLite escaping, allowing potential SQL injection when the SQLite backend is enabled.",
+    "confidence": 95,
+    "status": "PROPOSED"
+  },
+  {
+    "finding_id": "FINDING-003",
+    "vulnerability": "Potential Sensitive Information Exposure in Error Message",
+    "file_path": "C:\\Users\\ZUMAL\\Documents\\DVWA\\vulnerabilities\\sqli\\source\\medium.php",
+    "line_start": 12,
+    "line_end": 12,
+    "parameter": "id",
+    "description": "Database query errors are printed directly to the output via mysqli_error(), which can leak internal database structure and query details.",
+    "confidence": 90,
+    "status": "PROPOSED"
+  },
+  {
+    "finding_id": "FINDING-004",
+    "vulnerability": "Potential Reflected Cross-Site Scripting (XSS)",
+    "file_path": "C:\\Users\\ZUMAL\\Documents\\DVWA\\vulnerabilities\\sqli\\source\\medium.php",
+    "line_start": 21,
+    "line_end": 21,
+    "parameter": "id",
+    "description": "User input $id is concatenated directly into HTML markup in $html without sanitization or output encoding (e.g., htmlspecialchars).",
+    "confidence": 85,
+    "status": "PROPOSED"
+  },
+  {
+    "finding_id": "FINDING-001",
+    "vulnerability": "Potential SQL Injection",
+    "file_path": "C:\\Users\\ZUMAL\\Documents\\DVWA\\vulnerabilities\\sqli\\source\\high.php",
+    "line_start": 10,
+    "line_end": 11,
+    "parameter": "id",
+    "description": "The session variable 'id' is interpolated directly into the MySQL query string without parameterization or input sanitization, potentially allowing SQL injection if session data is controllable.",
+    "confidence": 85,
+    "status": "PROPOSED"
+  },
+  {
+    "finding_id": "FINDING-002",
+    "vulnerability": "Potential SQL Injection",
+    "file_path": "C:\\Users\\ZUMAL\\Documents\\DVWA\\vulnerabilities\\sqli\\source\\high.php",
+    "line_start": 28,
+    "line_end": 31,
+    "parameter": "id",
+    "description": "The session variable 'id' is directly concatenated into the SQLite query string without parameterized statements or input validation, potentially exposing the query to SQL injection.",
+    "confidence": 85,
+    "status": "PROPOSED"
+  },
+  {
+    "finding_id": "FINDING-003",
+    "vulnerability": "Potential Cross-Site Scripting (XSS)",
+    "file_path": "C:\\Users\\ZUMAL\\Documents\\DVWA\\vulnerabilities\\sqli\\source\\high.php",
+    "line_start": 20,
+    "line_end": 20,
+    "parameter": "id",
+    "description": "Values from the session variable 'id' and database result fields ('first_name', 'last_name') are concatenated directly into HTML output without context-aware output encoding.",
+    "confidence": 75,
+    "status": "PROPOSED"
+  },
+  {
+    "finding_id": "FINDING-004",
+    "vulnerability": "Potential Cross-Site Scripting (XSS)",
+    "file_path": "C:\\Users\\ZUMAL\\Documents\\DVWA\\vulnerabilities\\sqli\\source\\high.php",
+    "line_start": 44,
+    "line_end": 44,
+    "parameter": "id",
+    "description": "Values retrieved from the SQLite result set and the session variable 'id' are embedded into HTML output without output sanitization or encoding.",
+    "confidence": 75,
+    "status": "PROPOSED"
+  }
+]
