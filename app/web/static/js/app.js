@@ -191,7 +191,34 @@ document.addEventListener(
                 );
 
 
+            const dynamicAuthCards =
+                Array.from(
+                    document.querySelectorAll(
+                        "[data-auth-mode]"
+                    )
+                );
+
+
+            const authenticationFields =
+                document.getElementById(
+                    "authenticationFields"
+                );
+
+
+            const dynamicUsername =
+                document.getElementById(
+                    "dynamicUsername"
+                );
+
+
+            const dynamicPassword =
+                document.getElementById(
+                    "dynamicPassword"
+                );
+
+
             let selectedMode = null;
+            let selectedAuthenticationMode = "NONE";
 
 
             // ====================================================
@@ -565,12 +592,10 @@ document.addEventListener(
                         ? dynamicTargetUrl.value.trim()
                         : "";
 
-
                     const scope =
                         dynamicScope
                         ? dynamicScope.value.trim()
                         : "";
-
 
                     const authorised =
                         Boolean(
@@ -578,51 +603,54 @@ document.addEventListener(
                             && dynamicAuthorised.checked
                         );
 
+                    const requiresCredentials =
+                        selectedAuthenticationMode === "FORM";
+
+                    const username =
+                        dynamicUsername
+                        ? dynamicUsername.value.trim()
+                        : "";
+
+                    const password =
+                        dynamicPassword
+                        ? dynamicPassword.value
+                        : "";
 
                     ready =
                         Boolean(
                             targetUrl
-                            && isValidUrl(
-                                targetUrl
-                            )
+                            && isValidUrl(targetUrl)
                             && scope
                             && authorised
+                            && (
+                                !requiresCredentials
+                                || (username && password)
+                            )
                         );
 
-
                     if (!targetUrl) {
-
-                        message =
-                            "Enter the authorised target URL.";
-
+                        message = "Enter the authorised target URL.";
                     }
-                    else if (
-                        !isValidUrl(
-                            targetUrl
-                        )
-                    ) {
-
-                        message =
-                            "Enter a valid HTTP or HTTPS target URL.";
-
+                    else if (!isValidUrl(targetUrl)) {
+                        message = "Enter a valid HTTP or HTTPS target URL.";
                     }
                     else if (!scope) {
-
-                        message =
-                            "Define the analysis scope.";
-
+                        message = "Define the analysis scope.";
+                    }
+                    else if (requiresCredentials && !username) {
+                        message = "Enter the authorised username or email.";
+                    }
+                    else if (requiresCredentials && !password) {
+                        message = "Enter the authorised account password.";
                     }
                     else if (!authorised) {
-
-                        message =
-                            "Confirm authorisation before continuing.";
-
+                        message = "Confirm authorisation before continuing.";
+                    }
+                    else if (requiresCredentials) {
+                        message = "Authenticated dynamic analysis configuration is complete.";
                     }
                     else {
-
-                        message =
-                            "Dynamic analysis configuration is complete.";
-
+                        message = "Unauthenticated dynamic analysis configuration is complete.";
                     }
 
                 }
@@ -803,6 +831,54 @@ document.addEventListener(
 
 
             // ====================================================
+            // DYNAMIC AUTHENTICATION MODE
+            // ====================================================
+
+            function selectAuthenticationMode(mode) {
+
+                selectedAuthenticationMode =
+                    mode === "FORM" ? "FORM" : "NONE";
+
+                dynamicAuthCards.forEach(
+                    function (card) {
+
+                        const isSelected =
+                            card.dataset.authMode === selectedAuthenticationMode;
+
+                        card.classList.toggle("selected", isSelected);
+                        card.setAttribute(
+                            "aria-pressed",
+                            isSelected ? "true" : "false"
+                        );
+
+                        const status =
+                            card.querySelector("[data-auth-status]");
+
+                        if (status) {
+                            status.textContent = isSelected ? "SELECTED" : "SELECT";
+                        }
+                    }
+                );
+
+                if (authenticationFields) {
+                    authenticationFields.hidden =
+                        selectedAuthenticationMode !== "FORM";
+                }
+
+                if (selectedAuthenticationMode === "NONE") {
+                    if (dynamicUsername) {
+                        dynamicUsername.value = "";
+                    }
+                    if (dynamicPassword) {
+                        dynamicPassword.value = "";
+                    }
+                }
+
+                updateValidation();
+            }
+
+
+            // ====================================================
             // CLEAR MODE SELECTION
             // ====================================================
 
@@ -929,6 +1005,22 @@ document.addEventListener(
 
 
             // ====================================================
+            // DYNAMIC ACCESS CARD EVENTS
+            // ====================================================
+
+            dynamicAuthCards.forEach(
+                function (card) {
+                    card.addEventListener(
+                        "click",
+                        function () {
+                            selectAuthenticationMode(card.dataset.authMode);
+                        }
+                    );
+                }
+            );
+
+
+            // ====================================================
             // CHANGE MODE
             // ====================================================
 
@@ -951,7 +1043,9 @@ document.addEventListener(
                 staticAuthorised,
                 dynamicTargetUrl,
                 dynamicScope,
-                dynamicAuthorised
+                dynamicAuthorised,
+                dynamicUsername,
+                dynamicPassword
             ].forEach(
                 function (element) {
 
@@ -1205,73 +1299,185 @@ document.addEventListener(
                             return;
                         }
 
-                        if (selectedMode !== "static") {
-                            if (validationMessage) {
-                                validationMessage.textContent =
-                                    "Dynamic provider integration is not connected yet.";
-                            }
-                            return;
-                        }
-
-                        const file =
-                            staticSourceFile
-                            && staticSourceFile.files
-                            ? staticSourceFile.files[0]
-                            : null;
-
-                        const applicationName =
-                            selectedApplicationName
-                            ? selectedApplicationName.value.trim()
-                            : "";
-
-                        if (!file || !applicationName) {
-                            updateValidation();
-                            return;
-                        }
-
                         const originalText =
                             startAnalysisButton.textContent;
 
                         startAnalysisButton.disabled = true;
-                        startAnalysisButton.textContent = "Starting Analysis...";
-
-                        if (validationMessage) {
-                            validationMessage.textContent =
-                                "Uploading the authorised source to the configured analysis provider...";
-                        }
-
-                        const formData = new FormData();
-                        formData.append("source_file", file);
-                        formData.append("application_name", applicationName);
-                        formData.append(
-                            "authorised",
-                            staticAuthorised && staticAuthorised.checked
-                            ? "true"
-                            : "false"
-                        );
+                        startAnalysisButton.textContent =
+                            "Starting Analysis...";
 
                         try {
-                            const response = await fetch(
-                                "/analysis/static",
-                                {
-                                    method: "POST",
-                                    body: formData
+
+                            let response;
+
+                            if (selectedMode === "static") {
+
+                                const file =
+                                    staticSourceFile
+                                    && staticSourceFile.files
+                                    ? staticSourceFile.files[0]
+                                    : null;
+
+                                const applicationName =
+                                    selectedApplicationName
+                                    ? selectedApplicationName.value.trim()
+                                    : "";
+
+                                if (!file || !applicationName) {
+                                    updateValidation();
+                                    startAnalysisButton.textContent =
+                                        originalText;
+                                    return;
                                 }
-                            );
+
+                                if (validationMessage) {
+                                    validationMessage.textContent =
+                                        "Uploading the authorised source to the configured analysis provider...";
+                                }
+
+                                const formData =
+                                    new FormData();
+
+                                formData.append(
+                                    "source_file",
+                                    file
+                                );
+
+                                formData.append(
+                                    "application_name",
+                                    applicationName
+                                );
+
+                                formData.append(
+                                    "authorised",
+                                    staticAuthorised
+                                    && staticAuthorised.checked
+                                    ? "true"
+                                    : "false"
+                                );
+
+                                response = await fetch(
+                                    "/analysis/static",
+                                    {
+                                        method: "POST",
+                                        body: formData
+                                    }
+                                );
+
+                            }
+                            else if (selectedMode === "dynamic") {
+
+                                const targetUrl =
+                                    dynamicTargetUrl
+                                    ? dynamicTargetUrl.value.trim()
+                                    : "";
+
+                                const analysisScope =
+                                    dynamicScope
+                                    ? dynamicScope.value.trim()
+                                    : "";
+
+                                const authenticationMode =
+                                    selectedAuthenticationMode;
+
+                                const username =
+                                    dynamicUsername
+                                    ? dynamicUsername.value.trim()
+                                    : "";
+
+                                const password =
+                                    dynamicPassword
+                                    ? dynamicPassword.value
+                                    : "";
+
+                                if (
+                                    !targetUrl
+                                    || !analysisScope
+                                    || !dynamicAuthorised
+                                    || !dynamicAuthorised.checked
+                                    || (
+                                        authenticationMode === "FORM"
+                                        && (!username || !password)
+                                    )
+                                ) {
+                                    updateValidation();
+                                    startAnalysisButton.textContent =
+                                        originalText;
+                                    return;
+                                }
+
+                                if (validationMessage) {
+                                    validationMessage.innerHTML =
+                                        '<span class="analysis-progress-spinner" aria-hidden="true"></span>' +
+                                        '<span> Analysis in progress — validating target, discovering runtime surface, building context and requesting LLM proposals...</span>';
+                                }
+
+                                const formData =
+                                    new FormData();
+
+                                formData.append(
+                                    "target_url",
+                                    targetUrl
+                                );
+
+                                formData.append(
+                                    "application_name",
+                                    targetUrl
+                                );
+
+                                formData.append(
+                                    "analysis_scope",
+                                    analysisScope
+                                );
+
+                                formData.append(
+                                    "authentication_mode",
+                                    authenticationMode
+                                );
+
+                                if (authenticationMode === "FORM") {
+                                    formData.append("username", username);
+                                    formData.append("password", password);
+                                }
+
+                                formData.append(
+                                    "authorised",
+                                    "true"
+                                );
+
+                                response = await fetch(
+                                    "/analysis/dynamic",
+                                    {
+                                        method: "POST",
+                                        body: formData
+                                    }
+                                );
+
+                            }
+                            else {
+                                throw new Error(
+                                    "Unknown analysis mode."
+                                );
+                            }
 
                             let result = {};
 
                             try {
-                                result = await response.json();
+                                result =
+                                    await response.json();
                             }
                             catch (error) {
                                 result = {
                                     ok: false,
-                                    error: "The server returned an invalid response."
+                                    error:
+                                        "The server returned an invalid response."
                                 };
                             }
 
-                            if (!response.ok || !result.ok) {
+                            if (
+                                !response.ok
+                                || !result.ok
+                            ) {
                                 throw new Error(
                                     result.error
                                     || `Request failed (${response.status})`
@@ -1279,22 +1485,35 @@ document.addEventListener(
                             }
 
                             if (validationMessage) {
+
+                                const analysisLabel =
+                                    result.analysis_type
+                                    || selectedMode.toUpperCase();
+
                                 validationMessage.textContent =
-                                    `Analysis prepared by ${result.provider}. Opening ${result.finding_count} proposed finding(s)...`;
+                                    `${analysisLabel} analysis prepared by ${result.provider}. Opening ${result.finding_count} proposed finding(s)...`;
                             }
 
-                            window.location.href = result.redirect_url;
+                            window.location.href =
+                                result.redirect_url;
                         }
                         catch (error) {
-                            console.error("Unable to start analysis:", error);
+
+                            console.error(
+                                "Unable to start analysis:",
+                                error
+                            );
 
                             if (validationMessage) {
                                 validationMessage.textContent =
                                     `Unable to start analysis: ${error.message}`;
                             }
 
-                            startAnalysisButton.disabled = false;
-                            startAnalysisButton.textContent = originalText;
+                            startAnalysisButton.disabled =
+                                false;
+
+                            startAnalysisButton.textContent =
+                                originalText;
                         }
                     }
                 );
@@ -1305,6 +1524,7 @@ document.addEventListener(
             // INITIAL HOME STATE
             // ====================================================
 
+            selectAuthenticationMode("NONE");
             clearSelection();
 
         }

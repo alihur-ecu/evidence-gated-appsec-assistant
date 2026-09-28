@@ -1,31 +1,33 @@
 """
 Flask web application for the Evidence-Gated AppSec Finding Assistant.
 
-Current development architecture:
+Application architecture:
 
-Preloaded Finding
+Authorised target
         ↓
-Runtime Verifier
+Discovery / analysis
         ↓
-Evidence
+AI candidate proposal
         ↓
-Evidence Gate
+Deterministic runtime verification
         ↓
 PROVED / REFUTED / NEEDS_HUMAN
         ↓
 Human Review
 
-The live LLM proposer is not connected yet.
-
-Therefore, the initial findings below are deliberately labelled as
-preloaded demonstration findings. The downstream verification pipeline
-uses real runtime evidence from the local DVWA lab.
+Production verification is target-driven. No application, domain, endpoint,
+parameter, authentication mechanism, or laboratory environment is hardcoded
+in this web layer. Local labs are used only by dedicated validation scripts.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import csv
+import json
+import uuid
+import time
 
 from flask import (
     Flask,
@@ -38,8 +40,16 @@ from flask import (
 )
 
 from app.analysis.analysis_service import run_static_analysis
+from app.dynamic_analysis.pipeline import run_dynamic_analysis
+from app.dynamic_analysis.discovery import DynamicDiscovery
+from app.dynamic_analysis.authentication import (
+    AUTH_FORM,
+    AUTH_NONE,
+    DynamicAuthenticationError,
+    create_analysis_session,
+    normalise_authentication_mode,
+)
 from app.analysis.finding_adapter import adapt_analysis_result
-from app.evidence_gate import evaluate_evidence
 
 from app.models.finding import (
     Finding,
@@ -47,9 +57,9 @@ from app.models.finding import (
     FindingType,
 )
 
-from app.runtime_evidence_collector import (
-    collect_sql_injection_evidence,
-    save_evidence,
+from app.dynamic_analysis.verification_service import (
+    DynamicVerificationService,
+    DynamicVerificationError,
 )
 
 
@@ -81,6 +91,11 @@ FINDINGS = {}
 FINDING_METADATA = {}
 ANALYSES = {}
 LATEST_ANALYSIS_ID = None
+
+# In-memory HTTP sessions are intentionally separate from analysis metadata.
+# Credentials are never stored. A session is retained only so deterministic
+# verification can reuse the same authorised access context as discovery.
+ANALYSIS_SESSIONS = {}
 
 
 # ======================================================================
@@ -156,7 +171,7 @@ def verification_status_for(
     """
     Execution state of the verifier.
 
-    This is intentionally different from the Evidence Gate result.
+    This is intentionally different from the deterministic verifier result.
 
     PENDING:
         No verification has been executed.
@@ -182,7 +197,7 @@ def evidence_gate_result_for(
     finding: Finding,
 ) -> str:
     """
-    Finding.status reflects the canonical result of the Evidence Gate.
+    Finding.status reflects the canonical deterministic verification result.
     """
 
     if finding.status == FindingStatus.PROPOSED:
@@ -194,122 +209,113 @@ def evidence_gate_result_for(
 def build_evidence_tests(
     evidence: dict | None,
 ) -> list[dict]:
-    """
-    Translate the verifier's structured evidence into presentation data
-    for finding_detail.html.
+    """Translate runtime observations into presentation data.
+
+    Phase 3E stores generic EvidenceBundle observations. A small legacy
+    fallback is retained so older in-memory evidence can still render during
+    development without affecting the new verification path.
     """
 
     if not evidence:
         return []
 
-    tests = evidence.get(
-        "tests",
-        {},
-    )
+    observations = evidence.get("observations")
 
+    if isinstance(observations, list):
+        result = []
+
+        for index, observation in enumerate(observations, start=1):
+            metadata = observation.get("metadata", {})
+            label = str(observation.get("label", f"OBSERVATION_{index}"))
+            is_baseline = (
+                observation.get("observation_id")
+                == evidence.get("baseline_observation_id")
+            )
+
+            result.append({
+                "test_id": f"T-{index:03d}",
+                "name": (
+                    "Baseline request"
+                    if is_baseline
+                    else label.replace("_", " " ).title()
+                ),
+                "result": "OBSERVED",
+                "payload": metadata.get("test_value", ""),
+                "request": (
+                    f"{observation.get('method', '')} "
+                    f"{observation.get('url', '')}"
+                ).strip(),
+                "response": (
+                    f"HTTP status: {observation.get('status_code')}\n"
+                    f"Response length: {observation.get('response_length')}\n"
+                    f"Response digest: {observation.get('response_digest')}\n"
+                    f"Error detected: {metadata.get('error_detected')}\n"
+                    f"Error family: {metadata.get('error_family')}\n"
+                    f"Error signature: {metadata.get('error_signature')}"
+                ),
+                "baseline": (
+                    "Functional baseline used to establish normal "
+                    "application behaviour."
+                    if is_baseline
+                    else "Compared with the functional baseline."
+                ),
+                "observed": (
+                    f"Error detected: {metadata.get('error_detected', False)}"
+                ),
+                "result_count": None,
+                "status_code": observation.get("status_code"),
+                "database_error_detected": bool(
+                    metadata.get("error_detected", False)
+                ),
+                "observations": [],
+            })
+
+        return result
+
+    # Legacy development evidence fallback.
+    tests = evidence.get("tests", {})
     display_definitions = [
-
-        (
-            "baseline",
-            "T-001",
-            "Baseline request",
-        ),
-
-        (
-            "true_condition",
-            "T-002",
-            "TRUE-condition SQL test",
-        ),
-
-        (
-            "false_condition",
-            "T-003",
-            "FALSE-condition SQL test",
-        ),
+        ("baseline", "T-001", "Baseline request"),
+        ("true_condition", "T-002", "TRUE-condition SQL test"),
+        ("false_condition", "T-003", "FALSE-condition SQL test"),
     ]
 
     result = []
-
-    for (
-        key,
-        test_id,
-        name,
-    ) in display_definitions:
-
+    for key, test_id, name in display_definitions:
         test = tests.get(key)
-
         if not test:
             continue
-
-        response = test.get(
-            "response",
-            {},
-        )
-
+        response = test.get("response", {})
         result.append({
-            "test_id":
-                test_id,
-
-            "name":
-                name,
-
-            "result":
-                "OBSERVED",
-
-            "payload":
-                test.get(
-                    "payload",
-                    "",
-                ),
-
-            "request":
-                test.get(
-                    "request_text",
-                    "",
-                ),
-
+            "test_id": test_id,
+            "name": name,
+            "result": "OBSERVED",
+            "payload": test.get("payload", ""),
+            "request": test.get("request_text", ""),
             "response": (
-                f"HTTP status: "
-                f"{response.get('status_code')}\n"
-                f"Response length: "
-                f"{response.get('response_length')}\n"
-                f"Matched records: "
-                f"{response.get('result_count')}\n"
+                f"HTTP status: {response.get('status_code')}\n"
+                f"Response length: {response.get('response_length')}\n"
+                f"Matched records: {response.get('result_count')}\n"
                 f"Database error detected: "
                 f"{response.get('database_error_detected')}\n\n"
                 f"{response.get('body_excerpt', '')}"
             ),
-
-            "baseline":
-                (
-                    "Baseline request used to establish normal "
-                    "application behaviour."
-                    if key == "baseline"
-                    else
-                    f"Baseline matched records: "
-                    f"{evidence['signals'].get('baseline_result_count')}"
-                ),
-
-            "observed":
-                (
-                    f"Observed matched records: "
-                    f"{response.get('result_count')}"
-                ),
-
-            # Presentation-friendly fields used by finding_detail.html.
-            # The original technical response remains preserved above.
-            "result_count":
-                response.get("result_count"),
-
-            "status_code":
-                response.get("status_code"),
-
-            "database_error_detected":
-                bool(response.get("database_error_detected", False)),
-
+            "baseline": (
+                "Baseline request used to establish normal "
+                "application behaviour."
+                if key == "baseline"
+                else "Compared with the baseline request."
+            ),
+            "observed": (
+                f"Observed matched records: {response.get('result_count')}"
+            ),
+            "result_count": response.get("result_count"),
+            "status_code": response.get("status_code"),
+            "database_error_detected": bool(
+                response.get("database_error_detected", False)
+            ),
             "observations": [],
         })
-
     return result
 
 
@@ -317,26 +323,78 @@ def build_evidence_summary(
     evidence: dict | None,
     gate_result: str,
 ) -> str | None:
-
     if not evidence:
         return None
 
-    signals = evidence.get(
-        "signals",
-        {},
-    )
+    verification = evidence.get("verification", {})
+    reasons = verification.get("reasons", [])
+
+    if reasons:
+        return (
+            "Deterministic runtime verification completed. "
+            f"Result: {gate_result}. "
+            + " ".join(str(reason) for reason in reasons)
+        )
 
     return (
-        "Deterministic runtime verification completed against the "
-        "local DVWA lab. "
-        f"Baseline returned "
-        f"{signals.get('baseline_result_count')} record(s), "
-        f"the TRUE condition returned "
-        f"{signals.get('true_result_count')} record(s), "
-        f"and the FALSE condition returned "
-        f"{signals.get('false_result_count')} record(s). "
-        f"Evidence Gate result: {gate_result}."
+        "Deterministic runtime verification completed. "
+        f"Result: {gate_result}."
     )
+
+
+def build_web_evidence(result) -> dict:
+    """Adapt a Phase 3E service result to the existing web contract."""
+
+    evidence = result.evidence.to_dict()
+    verification = result.verification.to_dict()
+
+    evidence["finding_id"] = result.finding_id
+    evidence["run_id"] = result.evidence.evidence_id
+    evidence["timestamp_utc"] = result.evidence.collected_at_utc
+    evidence["execution_status"] = "COMPLETED"
+    evidence["evidence_gate_result"] = result.finding_status.value
+    evidence["verification"] = verification
+
+    return evidence
+
+
+def save_web_evidence(
+    evidence: dict,
+) -> tuple[Path, Path]:
+    """Persist generic Phase 3E evidence without DVWA-specific fields."""
+
+    artifacts_dir = Path("artifacts") / "runs"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    run_id = evidence["run_id"]
+    json_file = artifacts_dir / f"{run_id}_runtime_evidence.json"
+
+    with json_file.open("w", encoding="utf-8") as file:
+        json.dump(evidence, file, indent=2)
+
+    csv_file = artifacts_dir / "runtime_evidence_results.csv"
+    verification = evidence.get("verification", {})
+    csv_row = {
+        "run_id": run_id,
+        "finding_id": evidence.get("finding_id"),
+        "timestamp_utc": evidence.get("timestamp_utc"),
+        "endpoint": evidence.get("endpoint"),
+        "method": evidence.get("method"),
+        "parameter": evidence.get("parameter"),
+        "capability": evidence.get("capability"),
+        "verifier_id": verification.get("verifier_id"),
+        "decision": verification.get("decision"),
+        "observation_count": len(evidence.get("observations", [])),
+    }
+
+    file_exists = csv_file.exists()
+    with csv_file.open("a", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=csv_row.keys())
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(csv_row)
+
+    return json_file, csv_file
 
 
 def build_view_model(
@@ -382,7 +440,7 @@ def build_view_model(
         "target":
             metadata.get(
                 "target",
-                "Local Lab",
+                "Not available",
             ),
 
         "source_file":
@@ -527,6 +585,87 @@ def register_analysis_result(analysis_result: dict) -> list[dict]:
     return [build_view_model(finding) for finding in FINDINGS.values()]
 
 
+def prepare_dynamic_analysis_result(
+    dynamic_result: dict,
+    *,
+    application_name: str,
+    analysis_scope: str = "",
+) -> dict:
+    """
+    Adapt the generic dynamic pipeline result to the existing web-analysis
+    result contract without changing the dynamic pipeline itself.
+
+    Candidate proposals remain PROPOSED. No verification result is invented.
+    """
+
+    analysis_id = f"D-{uuid.uuid4().hex[:8].upper()}"
+
+    target = dynamic_result.get("target", {})
+    target_url = (
+        target.get("base_url")
+        or target.get("original_url")
+        or "Not available"
+    )
+
+    findings = []
+
+    for proposal in dynamic_result.get("proposals", []):
+        item = dict(proposal)
+
+        # Existing finding_adapter consumes the common proposal fields.
+        # Dynamic-only reporting metadata is added without changing the
+        # proposal's security conclusion.
+        item.setdefault("scan_type", "DYNAMIC")
+        item.setdefault("source_file", "Runtime observation")
+        item.setdefault("endpoint", target_url)
+        item.setdefault("method", "GET")
+        item.setdefault("parameter", None)
+        item.setdefault(
+            "proposal_source",
+            dynamic_result.get(
+                "proposal_provider",
+                "UNKNOWN",
+            ),
+        )
+
+        findings.append(item)
+
+    return {
+        "analysis_id": analysis_id,
+        "provider": dynamic_result.get(
+            "proposal_provider",
+            "UNKNOWN",
+        ),
+        "proposal_provider": dynamic_result.get(
+            "proposal_provider",
+            "UNKNOWN",
+        ),
+        "application_name": application_name,
+        "analysis_scope": analysis_scope,
+        "analysis_type": "DYNAMIC",
+        "scan_type": "DYNAMIC",
+        "context_source": "DYNAMIC_DISCOVERY",
+        "source_file": "Runtime target",
+        "target": target_url,
+        "message": (
+            "Dynamic discovery and LLM proposal generation completed. "
+            "Candidate findings remain unverified until independent "
+            "runtime evidence is collected."
+        ),
+        "target_details": target,
+        "discovery": dynamic_result.get(
+            "discovery",
+            {},
+        ),
+        "context_build": dynamic_result.get(
+            "context_build",
+            {},
+        ),
+        "findings": findings,
+        "proposals": findings,
+    }
+
+
 # ======================================================================
 # ROOT
 # ======================================================================
@@ -589,6 +728,234 @@ def start_static_analysis():
         })
     except Exception as error:
         return jsonify({"ok": False, "error": str(error)}), 500
+
+
+# ======================================================================
+# START DYNAMIC ANALYSIS
+# ======================================================================
+
+@app.route("/analysis/dynamic", methods=["POST"])
+def start_dynamic_analysis():
+    request_started = time.perf_counter()
+
+    def trace(step: str) -> None:
+        elapsed = time.perf_counter() - request_started
+        print(f"[DYNAMIC] {elapsed:8.3f}s | {step}", flush=True)
+
+    trace("1. Request received")
+    data = request.get_json(silent=True) or request.form
+
+    target_url = str(data.get("target_url", "")).strip()
+    application_name = str(data.get("application_name", "")).strip()
+    analysis_scope = str(data.get("analysis_scope", "")).strip()
+
+    authorised_value = data.get("authorised")
+    authorised = (
+        authorised_value is True
+        or str(authorised_value).lower() == "true"
+    )
+
+    try:
+        authentication_mode = normalise_authentication_mode(
+            data.get("authentication_mode", AUTH_NONE)
+        )
+    except DynamicAuthenticationError as error:
+        trace(f"FAILED while normalising authentication mode: {error}")
+        return jsonify({"ok": False, "error": str(error)}), 400
+
+    username = str(data.get("username", "")).strip()
+    password = str(data.get("password", ""))
+
+    trace(
+        "2. Request parsed "
+        f"(target={target_url!r}, auth_mode={authentication_mode!r}, "
+        f"username_supplied={bool(username)}, password_supplied={bool(password)})"
+    )
+
+    if not target_url:
+        return jsonify({"ok": False, "error": "Target URL is required."}), 400
+
+    if not application_name:
+        application_name = target_url
+
+    if not analysis_scope:
+        return jsonify({"ok": False, "error": "Analysis scope is required."}), 400
+
+    if not authorised:
+        return jsonify({
+            "ok": False,
+            "error": "Authorisation confirmation is required.",
+        }), 400
+
+    if authentication_mode == AUTH_FORM and (not username or not password):
+        return jsonify({
+            "ok": False,
+            "error": (
+                "Username and password are required for authenticated analysis."
+            ),
+        }), 400
+
+    trace("3. Input validation complete")
+
+    try:
+        trace("4. Creating analysis session / starting authentication")
+        stage_started = time.perf_counter()
+        analysis_session, auth_result = create_analysis_session(
+            target_url=target_url,
+            authentication_mode=authentication_mode,
+            username=username if authentication_mode == AUTH_FORM else None,
+            password=password if authentication_mode == AUTH_FORM else None,
+        )
+        trace(
+            "5. Authentication/session complete "
+            f"({time.perf_counter() - stage_started:.3f}s; "
+            f"authenticated={auth_result.authenticated})"
+        )
+
+        trace("6. Creating DynamicDiscovery with authenticated session")
+        discovery = DynamicDiscovery(
+            session=analysis_session,
+        )
+
+        trace("7. Starting dynamic pipeline (discovery -> context -> proposals)")
+        stage_started = time.perf_counter()
+        dynamic_result = run_dynamic_analysis(
+            target_url=target_url,
+            application_name=application_name,
+            discovery=discovery,
+        )
+        trace(
+            "8. Dynamic pipeline complete "
+            f"({time.perf_counter() - stage_started:.3f}s)"
+        )
+
+        discovery_result = dynamic_result.get("discovery", {})
+
+        proposal_execution = dynamic_result.get("proposal_execution")
+        proposal_status = str(dynamic_result.get("proposal_status", "SUCCESS")).upper()
+        if isinstance(proposal_execution, dict):
+            attempted = int(proposal_execution.get("chunks_attempted", 0) or 0)
+            succeeded = int(proposal_execution.get("chunks_succeeded", 0) or 0)
+            failed = int(proposal_execution.get("chunks_failed", 0) or 0)
+            if proposal_status == "FAILED" or (attempted > 0 and failed > 0 and succeeded == 0):
+                failed_chunks = proposal_execution.get("failed_chunks", []) or []
+                first_failure = failed_chunks[0] if failed_chunks else {}
+                status_code = first_failure.get("status_code")
+                error_type = first_failure.get("error_type", "ProviderError")
+                if status_code == 429:
+                    user_message = (
+                        "Runtime discovery completed, but the AI proposal stage "
+                        "could not complete because the configured LLM provider "
+                        "reached its rate limit. No security conclusion has been made. "
+                        "Please retry later."
+                    )
+                    http_status = 429
+                    code = "LLM_RATE_LIMITED"
+                else:
+                    user_message = (
+                        "Runtime discovery completed, but the AI proposal stage "
+                        "could not complete. No security conclusion has been made. "
+                        "Please retry the analysis."
+                    )
+                    http_status = 502
+                    code = "LLM_PROPOSAL_FAILED"
+                trace(
+                    "9. Proposal stage failed "
+                    f"(attempted={attempted}, failed={failed}, "
+                    f"status={status_code}, type={error_type})"
+                )
+                return jsonify({
+                    "ok": False,
+                    "stage": "PROPOSAL_FAILED",
+                    "code": code,
+                    "error": user_message,
+                    "provider": dynamic_result.get("proposal_provider", "UNKNOWN"),
+                    "discovery_completed": True,
+                    "discovery_summary": {
+                        "pages": len(discovery_result.get("pages", [])),
+                        "endpoints": len(discovery_result.get("endpoints", [])),
+                        "forms": len(discovery_result.get("forms", [])),
+                        "errors": len(discovery_result.get("errors", [])),
+                    },
+                }), http_status
+
+        trace(
+            "9. Pipeline summary: "
+            f"pages={len(discovery_result.get('pages', []))}, "
+            f"endpoints={len(discovery_result.get('endpoints', []))}, "
+            f"forms={len(discovery_result.get('forms', []))}, "
+            f"errors={len(discovery_result.get('errors', []))}, "
+            f"proposals={len(dynamic_result.get('proposals', []))}, "
+            f"provider={dynamic_result.get('proposal_provider', 'UNKNOWN')}"
+        )
+
+        trace("10. Preparing web analysis result")
+        analysis_result = prepare_dynamic_analysis_result(
+            dynamic_result,
+            application_name=application_name,
+            analysis_scope=analysis_scope,
+        )
+
+        # Only non-secret authentication metadata is reportable.
+        analysis_result["authentication"] = auth_result.to_dict()
+        analysis_result["authentication_mode"] = auth_result.mode
+
+        trace("11. Registering candidate findings")
+        findings = register_analysis_result(
+            analysis_result
+        )
+
+        analysis_id = analysis_result["analysis_id"]
+        ANALYSIS_SESSIONS.clear()
+        ANALYSIS_SESSIONS[analysis_id] = analysis_session
+        trace(
+            f"12. Analysis registered ({analysis_id}); "
+            f"findings={len(findings)}"
+        )
+
+        response = {
+            "ok": True,
+            "analysis_id": analysis_id,
+            "provider": dynamic_result.get(
+                "proposal_provider",
+                "UNKNOWN",
+            ),
+            "analysis_type": "DYNAMIC",
+            "proposal_provider": dynamic_result.get(
+                "proposal_provider",
+                "UNKNOWN",
+            ),
+            "authentication_mode": auth_result.mode,
+            "authenticated": auth_result.authenticated,
+            "finding_count": len(findings),
+            "discovery_summary": {
+                "pages": len(discovery_result.get("pages", [])),
+                "endpoints": len(discovery_result.get("endpoints", [])),
+                "forms": len(discovery_result.get("forms", [])),
+                "errors": len(discovery_result.get("errors", [])),
+            },
+            "redirect_url": url_for(
+                "analysis_results",
+                analysis_id=analysis_id,
+            ),
+        }
+        trace("13. JSON response ready")
+        return jsonify(response)
+
+    except DynamicAuthenticationError as error:
+        trace(f"FAILED during authentication: {type(error).__name__}: {error}")
+        return jsonify({
+            "ok": False,
+            "error": str(error),
+        }), 400
+
+    except Exception as error:
+        trace(f"FAILED: {type(error).__name__}: {error}")
+        app.logger.exception("Dynamic analysis request failed")
+        return jsonify({
+            "ok": False,
+            "error": str(error),
+        }), 500
 
 
 @app.route("/analysis/<analysis_id>/results")
@@ -674,10 +1041,7 @@ def verify_finding(
         finding_id
     )
 
-    if (
-        finding.finding_type
-        != FindingType.SQL_INJECTION
-    ):
+    if finding.finding_type != FindingType.SQL_INJECTION:
         return jsonify({
             "ok": False,
             "error": (
@@ -687,62 +1051,41 @@ def verify_finding(
         }), 400
 
     try:
+        metadata = FINDING_METADATA.get(finding_id, {})
+        analysis_id = metadata.get("analysis_id")
+        analysis_session = ANALYSIS_SESSIONS.get(analysis_id)
 
-        evidence = (
-            collect_sql_injection_evidence(
-                finding
-            )
+        service = DynamicVerificationService(
+            session=analysis_session,
         )
+        result = service.verify(finding)
 
-        gate_status = (
-            evaluate_evidence(
-                evidence
-            )
-        )
+        # The verifier result becomes the canonical verification status.
+        # Human review remains a separate later decision.
+        finding.status = result.finding_status
 
-        # Canonical finding status comes from the Evidence Gate.
-        finding.status = gate_status
+        evidence = build_web_evidence(result)
+        json_file, csv_file = save_web_evidence(evidence)
 
-        # Record gate result in the evidence artifact too.
-        evidence["evidence_gate_result"] = (
-            gate_status.value
-        )
-
-        json_file, csv_file = (
-            save_evidence(
-                evidence
-            )
-        )
-
-        EVIDENCE_BY_FINDING[
-            finding_id
-        ] = evidence
+        EVIDENCE_BY_FINDING[finding_id] = evidence
 
         return jsonify({
-            "ok":
-                True,
-
-            "finding_id":
-                finding_id,
-
-            "verification_status":
-                "COMPLETED",
-
-            "evidence_gate_result":
-                gate_status.value,
-
-            "run_id":
-                evidence["run_id"],
-
-            "json_artifact":
-                str(json_file),
-
-            "csv_artifact":
-                str(csv_file),
+            "ok": True,
+            "finding_id": finding_id,
+            "verification_status": "COMPLETED",
+            "evidence_gate_result": result.finding_status.value,
+            "run_id": evidence["run_id"],
+            "json_artifact": str(json_file),
+            "csv_artifact": str(csv_file),
         })
 
-    except Exception as error:
+    except DynamicVerificationError as error:
+        return jsonify({
+            "ok": False,
+            "error": str(error),
+        }), 400
 
+    except Exception as error:
         return jsonify({
             "ok": False,
             "error": str(error),

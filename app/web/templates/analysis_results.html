@@ -4,53 +4,241 @@
 
 {% block current_focus %}Analysis Results{% endblock %}
 
-{% block target_selector %}<strong>{{ analysis.application_name }}</strong>{% endblock %}
+{% block target_selector %}
+<strong>{{ analysis.application_name }}</strong>
+{% endblock %}
 
-{% block top_status %}{{ analysis.provider }} Analysis{% endblock %}
+{% block top_status %}
+{{ analysis.provider }} Analysis
+{% endblock %}
 
 {% block content %}
 <div class="page-layout analysis-results-page">
     <section class="main-column">
-        <div class="breadcrumb">Start Analysis → Analysis Results</div>
+
+        <div class="breadcrumb">
+            Start Analysis → Analysis Results
+        </div>
 
         <section class="finding-title-row analysis-results-title">
             <div>
-                <span class="analysis-provider-badge">{{ analysis.provider }} PROVIDER</span>
-                <h1>Static Analysis Results</h1>
+                <span class="analysis-provider-badge">
+                    {{ analysis.provider }} PROVIDER
+                </span>
+
+                {% if analysis.analysis_type == "DYNAMIC" or analysis.scan_type == "DYNAMIC" %}
+                    <h1>Dynamic Analysis Results</h1>
+                {% else %}
+                    <h1>Static Analysis Results</h1>
+                {% endif %}
+
                 <p class="muted">
-                    Candidate findings are proposals only. Independent verification has not run yet.
+                    {% if analysis.analysis_type == "DYNAMIC" or analysis.scan_type == "DYNAMIC" %}
+                        Runtime discovery and LLM proposal analysis completed.
+                        Candidate findings require independent evidence before verification.
+                    {% elif analysis.provider == "STATIC_SOURCE" %}
+                        Source code has been prepared for candidate analysis.
+                    {% else %}
+                        Candidate findings are proposals only.
+                        Independent verification has not run yet.
+                    {% endif %}
                 </p>
             </div>
+
             <div class="finding-meta">
-                <span class="finding-id">{{ findings | length }} Proposed</span>
+                <span class="finding-id">
+                    {{ findings | length }} Proposed
+                </span>
             </div>
         </section>
+
 
         <section class="analysis-run-summary">
-            <div><span>APPLICATION</span><strong>{{ analysis.application_name }}</strong></div>
-            <div><span>SOURCE FILE</span><strong>{{ analysis.source_file }}</strong></div>
-            <div><span>CONTEXT SOURCE</span><strong>{{ analysis.context_source }}</strong></div>
-            <div><span>ANALYSIS ID</span><strong>{{ analysis.analysis_id }}</strong></div>
-        </section>
 
-        <div class="mock-disclosure {% if not analysis.fixture_recognised %}mock-disclosure-warning{% endif %}">
-            <strong>{% if analysis.fixture_recognised %}Controlled mock fixture recognised{% else %}No registered mock fixture{% endif %}</strong>
-            <p>{{ analysis.message }}</p>
-            <small>The MOCK provider is a development integration layer. It is not Hassan's live collector or live LLM proposer.</small>
-        </div>
+            {% if analysis.analysis_type == "DYNAMIC" or analysis.scan_type == "DYNAMIC" %}
 
-        <article class="panel analysis-results-panel">
-            <div class="panel-header">
-                <div>
-                    <h3>Proposed Findings</h3>
-                    <p>Open a finding to continue to independent verification and human review.</p>
-                </div>
-                <span class="status proposed">PROPOSED ≠ VERIFIED</span>
+            <div>
+                <span>TARGET URL</span>
+                <strong>{{ analysis.target }}</strong>
             </div>
 
+            <div>
+                <span>ANALYSIS SCOPE</span>
+                <strong>{{ analysis.analysis_scope or "—" }}</strong>
+            </div>
+
+            <div>
+                <span>CONTEXT SOURCE</span>
+                <strong>Runtime HTTP context</strong>
+            </div>
+
+            <div>
+                <span>ANALYSIS ID</span>
+                <strong>{{ analysis.analysis_id }}</strong>
+            </div>
+
+            {% else %}
+
+            <div>
+                <span>APPLICATION</span>
+                <strong>{{ analysis.application_name }}</strong>
+            </div>
+
+            <div>
+                <span>SOURCE FILE</span>
+                <strong>{{ analysis.source_file }}</strong>
+            </div>
+
+            <div>
+                <span>CONTEXT SOURCE</span>
+                <strong>{{ analysis.context_source }}</strong>
+            </div>
+
+            <div>
+                <span>ANALYSIS ID</span>
+                <strong>{{ analysis.analysis_id }}</strong>
+            </div>
+
+            {% endif %}
+
+        </section>
+
+        {% if analysis.analysis_type == "DYNAMIC" or analysis.scan_type == "DYNAMIC" %}
+
+        <div class="mock-disclosure">
+            <strong>Dynamic discovery completed</strong>
+
+            <p>
+                The authorised runtime target was observed and converted into
+                bounded analysis context. Candidate findings remain proposals
+                until independent runtime evidence verifies them.
+            </p>
+
+            {% if analysis.discovery %}
+            <small>
+                {{ analysis.discovery.pages | default([], true) | length }}
+                pages observed ·
+                {{ analysis.discovery.endpoints | default([], true) | length }}
+                endpoints discovered ·
+                {{ analysis.discovery.forms | default([], true) | length }}
+                forms discovered ·
+                {{ analysis.context_build.contexts | default([], true) | length }}
+                contexts prepared
+            </small>
+            {% endif %}
+        </div>
+
+        {% endif %}
+
+
+        {# ==========================================================
+           MOCK PROVIDER DISCLOSURE
+           ========================================================== #}
+
+        {% if analysis.provider == "MOCK" %}
+
+        <div class="
+            mock-disclosure
+            {% if not analysis.fixture_recognised %}
+                mock-disclosure-warning
+            {% endif %}
+        ">
+
+            <strong>
+                {% if analysis.fixture_recognised %}
+                    Controlled mock fixture recognised
+                {% else %}
+                    No registered mock fixture
+                {% endif %}
+            </strong>
+
+            <p>
+                {{ analysis.message }}
+            </p>
+
+            <small>
+                The MOCK provider is a development integration layer.
+                It is not a live source-code analyser or live LLM proposer.
+            </small>
+
+        </div>
+
+        {% endif %}
+
+
+        {# ==========================================================
+           REAL STATIC SOURCE PREPARATION
+           ========================================================== #}
+
+        {% if analysis.provider == "STATIC_SOURCE" %}
+
+        <div class="mock-disclosure">
+
+            <strong>
+                Static source preparation completed
+            </strong>
+
+            <p>
+                {{ analysis.message }}
+            </p>
+
+            {% if analysis.context_coverage %}
+
+            <small>
+                {{ analysis.context_coverage.files_selected }}
+                non-empty source files prepared as
+                {{ analysis.context_coverage.chunks_created }}
+                bounded context chunks.
+
+                {% if analysis.context_coverage.truncated %}
+                    Analysis context was limited by the configured
+                    processing budget.
+                {% else %}
+                    The collected source context remained within the
+                    configured processing budget.
+                {% endif %}
+            </small>
+
+            {% endif %}
+
+        </div>
+
+        {% endif %}
+
+
+        <article class="panel analysis-results-panel">
+
+            <div class="panel-header">
+
+                <div>
+                    <h3>Proposed Findings</h3>
+
+                    <p>
+                        {% if findings %}
+                            Open a finding to continue to independent
+                            verification and human review.
+                        {% elif analysis.provider == "STATIC_SOURCE" %}
+                            Source preparation is complete.
+                            Candidate generation has not run yet.
+                        {% else %}
+                            No candidate findings are available for this analysis.
+                        {% endif %}
+                    </p>
+                </div>
+
+                <span class="status proposed">
+                    PROPOSED ≠ VERIFIED
+                </span>
+
+            </div>
+
+
             {% if findings %}
+
             <div class="analysis-results-table-wrap">
+
                 <table class="analysis-results-table">
+
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -63,34 +251,202 @@
                             <th></th>
                         </tr>
                     </thead>
+
                     <tbody>
+
                         {% for finding in findings %}
+
                         <tr>
-                            <td><strong>{{ finding.finding_id }}</strong></td>
-                            <td>{{ finding.finding_type }}</td>
-                            <td><code>{{ finding.endpoint }}</code></td>
-                            <td><code>{{ finding.parameter }}</code></td>
-                            <td>{{ finding.proposed_cwe }}</td>
-                            <td>{{ finding.suggested_severity }}</td>
-                            <td><span class="status proposed">{{ finding.llm_status }}</span></td>
+
                             <td>
-                                <a class="review-finding-link" href="{{ url_for('finding_detail', finding_id=finding.finding_id) }}">
+                                <strong>
+                                    {{ finding.finding_id }}
+                                </strong>
+                            </td>
+
+                            <td>
+                                {{ finding.finding_type }}
+                            </td>
+
+                            <td>
+                                <code>
+                                    {{ finding.endpoint or "—" }}
+                                </code>
+                            </td>
+
+                            <td>
+                                <code>
+                                    {{ finding.parameter or "—" }}
+                                </code>
+                            </td>
+
+                            <td>
+                                {{ finding.proposed_cwe or "—" }}
+                            </td>
+
+                            <td>
+                                {{ finding.suggested_severity or "—" }}
+                            </td>
+
+                            <td>
+                                <span class="status proposed">
+                                    {{ finding.llm_status }}
+                                </span>
+                            </td>
+
+                            <td>
+                                <a
+                                    class="review-finding-link"
+                                    href="{{
+                                        url_for(
+                                            'finding_detail',
+                                            finding_id=finding.finding_id
+                                        )
+                                    }}"
+                                >
                                     Review →
                                 </a>
                             </td>
+
                         </tr>
+
                         {% endfor %}
+
                     </tbody>
+
                 </table>
+
             </div>
+
+
             {% else %}
-            <div class="analysis-empty-state">
-                <strong>No mock findings available for this source.</strong>
-                <p>The source was accepted, but this development provider only returns proposals for registered fixtures. It does not invent vulnerabilities for unknown files.</p>
-                <a href="{{ url_for('home') }}">Start another analysis</a>
-            </div>
+
+
+                {% if analysis.provider == "STATIC_SOURCE" %}
+
+                <div class="analysis-empty-state">
+
+                    <strong>
+                        Source context prepared successfully.
+                    </strong>
+
+                    <p>
+                        The uploaded project was safely processed and
+                        converted into bounded source-code context.
+                        No vulnerability proposals have been generated yet
+                        because a live proposer is not connected at this stage.
+                    </p>
+
+                    {% if analysis.context_coverage %}
+
+                    <p>
+                        <strong>
+                            {{ analysis.context_coverage.files_selected }}
+                        </strong>
+                        source files analysed ·
+
+                        <strong>
+                            {{ analysis.context_coverage.chunks_created }}
+                        </strong>
+                        context chunks prepared ·
+
+                        <strong>
+                            {{ analysis.context_coverage.files_excluded_by_budget }}
+                        </strong>
+                        files excluded by processing limits
+                    </p>
+
+                    {% endif %}
+
+                    <a href="{{ url_for('home') }}">
+                        Start another analysis
+                    </a>
+
+                </div>
+
+
+                {% elif analysis.provider == "MOCK" %}
+
+                <div class="analysis-empty-state">
+
+                    <strong>
+                        No mock findings available for this source.
+                    </strong>
+
+                    <p>
+                        The source was accepted, but this development
+                        provider only returns proposals for registered
+                        fixtures. It does not invent vulnerabilities for
+                        unknown files.
+                    </p>
+
+                    <a href="{{ url_for('home') }}">
+                        Start another analysis
+                    </a>
+
+                </div>
+
+
+                {% elif analysis.analysis_type == "DYNAMIC" or analysis.scan_type == "DYNAMIC" %}
+
+                <div class="analysis-empty-state">
+
+                    <strong>
+                        Dynamic analysis completed with no candidate findings.
+                    </strong>
+
+                    <p>
+                        Discovery and context preparation completed successfully,
+                        but the current proposal stage did not produce candidate
+                        vulnerability findings. This does not mean the target has
+                        been proven free of vulnerabilities.
+                    </p>
+
+                    {% if analysis.discovery %}
+                    <p>
+                        <strong>{{ analysis.discovery.pages | default([], true) | length }}</strong>
+                        pages observed ·
+                        <strong>{{ analysis.discovery.endpoints | default([], true) | length }}</strong>
+                        endpoints discovered ·
+                        <strong>{{ analysis.discovery.forms | default([], true) | length }}</strong>
+                        forms discovered ·
+                        <strong>{{ analysis.context_build.contexts | default([], true) | length }}</strong>
+                        contexts prepared
+                    </p>
+                    {% endif %}
+
+                    <a href="{{ url_for('home') }}">
+                        Start another analysis
+                    </a>
+
+                </div>
+
+                {% else %}
+
+                <div class="analysis-empty-state">
+
+                    <strong>
+                        No candidate findings available.
+                    </strong>
+
+                    <p>
+                        The analysis completed without producing
+                        candidate vulnerability proposals.
+                    </p>
+
+                    <a href="{{ url_for('home') }}">
+                        Start another analysis
+                    </a>
+
+                </div>
+
+                {% endif %}
+
+
             {% endif %}
+
         </article>
+
     </section>
 </div>
 {% endblock %}

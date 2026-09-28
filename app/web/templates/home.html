@@ -358,10 +358,61 @@ Start Analysis | Evidence-Gated AppSec Finding Assistant
                 hidden
             >
 
-                <div class="config-grid">
+                <div class="dynamic-access-heading">
+                    <span class="launch-eyebrow">DYNAMIC ACCESS</span>
+                    <h3>Choose how the application should be analysed</h3>
+                    <p>
+                        Public coverage does not require credentials. Authenticated
+                        coverage extends discovery into authorised areas protected by
+                        a conventional username/password login form.
+                    </p>
+                </div>
+
+                <div class="dynamic-access-grid" id="dynamicAccessGrid">
+
+                    <button
+                        type="button"
+                        class="dynamic-access-card selected"
+                        id="unauthenticatedAccessCard"
+                        data-auth-mode="NONE"
+                        aria-pressed="true"
+                    >
+                        <span class="access-card-number">01</span>
+                        <span class="access-card-state" data-auth-status>SELECTED</span>
+                        <span class="access-card-icon" aria-hidden="true">◎</span>
+                        <strong>Unauthenticated Scan</strong>
+                        <small>Public attack surface</small>
+                        <p>
+                            Analyse pages, forms and endpoints accessible without
+                            credentials.
+                        </p>
+                        <span class="access-card-requirement">No credentials required</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="dynamic-access-card"
+                        id="authenticatedAccessCard"
+                        data-auth-mode="FORM"
+                        aria-pressed="false"
+                    >
+                        <span class="access-card-number">02</span>
+                        <span class="access-card-state" data-auth-status>SELECT</span>
+                        <span class="access-card-icon" aria-hidden="true">↗</span>
+                        <strong>Authenticated Scan</strong>
+                        <small>Extended authorised surface</small>
+                        <p>
+                            Establish an authorised HTML form session before discovery
+                            and reuse it for deterministic verification.
+                        </p>
+                        <span class="access-card-requirement">Username + password</span>
+                    </button>
+
+                </div>
+
+                <div class="config-grid dynamic-target-grid">
 
                     <div class="config-field config-field-wide">
-
                         <label for="dynamicTargetUrl">
                             Target URL
                             <span>Required</span>
@@ -370,19 +421,16 @@ Start Analysis | Evidence-Gated AppSec Finding Assistant
                         <input
                             id="dynamicTargetUrl"
                             type="url"
-                            placeholder="http://localhost:4280"
+                            placeholder="https://application.example"
                             autocomplete="off"
                         >
 
                         <small class="field-help">
                             Enter the authorised running application to be analysed.
                         </small>
-
                     </div>
 
-
                     <div class="config-field">
-
                         <label for="dynamicScope">
                             Analysis Scope
                             <span>Required</span>
@@ -391,39 +439,81 @@ Start Analysis | Evidence-Gated AppSec Finding Assistant
                         <input
                             id="dynamicScope"
                             type="text"
-                            placeholder="e.g. Local DVWA lab"
+                            placeholder="e.g. Public web application"
                             autocomplete="off"
                         >
-
                     </div>
 
-
                     <div class="config-field">
-
-                        <label>
-                            Context Source
-                        </label>
-
+                        <label>Context Source</label>
                         <div class="config-readonly">
                             Runtime HTTP context
                         </div>
-
                     </div>
 
                 </div>
 
+                <section
+                    class="authentication-fields"
+                    id="authenticationFields"
+                    hidden
+                    aria-live="polite"
+                >
+                    <div class="authentication-heading">
+                        <div>
+                            <span>AUTHENTICATION CONTEXT</span>
+                            <strong>Authorised HTML form login</strong>
+                        </div>
+                        <small>
+                            Credentials are used only to establish the in-memory scan
+                            session and are not written to findings, evidence or reports.
+                        </small>
+                    </div>
+
+                    <div class="config-grid">
+                        <div class="config-field">
+                            <label for="dynamicUsername">
+                                Username or Email
+                                <span>Required</span>
+                            </label>
+                            <input
+                                id="dynamicUsername"
+                                type="text"
+                                autocomplete="username"
+                                placeholder="Authorised test account"
+                            >
+                        </div>
+
+                        <div class="config-field">
+                            <label for="dynamicPassword">
+                                Password
+                                <span>Required</span>
+                            </label>
+                            <input
+                                id="dynamicPassword"
+                                type="password"
+                                autocomplete="current-password"
+                                placeholder="Password"
+                            >
+                        </div>
+                    </div>
+
+                    <p class="authentication-note">
+                        Current MVP: conventional server-rendered HTML login forms.
+                        SSO, MFA, bearer tokens and imported sessions remain separate
+                        authentication adapters.
+                    </p>
+                </section>
 
                 <label class="authorisation-check">
-
                     <input
                         id="dynamicAuthorised"
                         type="checkbox"
                     >
-
                     <span>
-                        I confirm that I am authorised to test this target.
+                        I confirm that I am authorised to test this target and, when
+                        supplied, to use these credentials for this security analysis.
                     </span>
-
                 </label>
 
             </div>
