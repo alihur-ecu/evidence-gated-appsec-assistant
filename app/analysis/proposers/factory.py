@@ -20,6 +20,7 @@ SUPPORTED_LLM_PROVIDERS = {
     "gemini",
     "openai",
     "azure_openai",
+    "lmstudio",
     "custom",
 }
 
@@ -70,6 +71,7 @@ def get_configured_llm_provider() -> str:
 
 def create_static_proposer(
     provider_name: str | None = None,
+    api_key: str | None = None,
 ) -> StaticProposer:
     """
     Create the configured static proposer.
@@ -111,7 +113,7 @@ def create_static_proposer(
                 "using LLM_PROVIDER=gemini."
             ) from exc
 
-        return GeminiStaticProposer()
+        return GeminiStaticProposer(api_key=api_key)
 
     if selected_provider == "openai":
         try:
@@ -125,7 +127,21 @@ def create_static_proposer(
                 "using LLM_PROVIDER=openai."
             ) from exc
 
-        return OpenAIStaticProposer()
+        return OpenAIStaticProposer(api_key=api_key)
+
+    if selected_provider == "lmstudio":
+        try:
+            from app.analysis.proposers.lmstudio import (
+                LMStudioStaticProposer,
+            )
+        except ImportError as exc:
+            raise RuntimeError(
+                "LM Studio proposer dependencies are not available. "
+                "Install the OpenAI SDK before using "
+                "LLM_PROVIDER=lmstudio."
+            ) from exc
+
+        return LMStudioStaticProposer(api_key=api_key)
 
     if selected_provider == "azure_openai":
         raise NotImplementedError(
