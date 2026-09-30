@@ -83,13 +83,14 @@ Start Analysis | Evidence-Gated AppSec Finding Assistant
 
                 </div>
 
-                <div class="mode-icon" aria-hidden="true">
-                    &lt;/&gt;
+                <div class="mode-identity">
+                    <div class="mode-icon" aria-hidden="true">
+                        &lt;/&gt;
+                    </div>
+                    <span class="mode-type">
+                        STATIC ANALYSIS
+                    </span>
                 </div>
-
-                <span class="mode-type">
-                    STATIC ANALYSIS
-                </span>
 
                 <h2>
                     Analyse application source
@@ -143,13 +144,14 @@ Start Analysis | Evidence-Gated AppSec Finding Assistant
 
                 </div>
 
-                <div class="mode-icon" aria-hidden="true">
-                    ↗
+                <div class="mode-identity">
+                    <div class="mode-icon" aria-hidden="true">
+                        ↗
+                    </div>
+                    <span class="mode-type">
+                        DYNAMIC ANALYSIS
+                    </span>
                 </div>
-
-                <span class="mode-type">
-                    DYNAMIC ANALYSIS
-                </span>
 
                 <h2>
                     Analyse a running application
@@ -213,6 +215,35 @@ Start Analysis | Evidence-Gated AppSec Finding Assistant
                 </button>
 
             </div>
+
+
+            <section class="llm-provider-config" aria-labelledby="llmProviderHeading">
+                <div class="config-field config-field-wide">
+                    <label for="llmProvider" id="llmProviderHeading">
+                        LLM Provider
+                        <span>Required</span>
+                    </label>
+                    <select id="llmProvider" name="llm_provider">
+                        <option value="">Choose the proposal model</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="gemini">Gemini</option>
+                    </select>
+                    <small class="field-help">
+                        The selected LLM proposes candidate findings only. Independent
+                        evidence verification and human review remain separate stages.
+                    </small>
+                </div>
+                <div class="config-field config-field-wide" id="llmApiKeyField" hidden>
+                    <label for="llmApiKey">
+                        API key for selected provider
+                        <span>Optional if configured on server</span>
+                    </label>
+                    <input id="llmApiKey" type="password" autocomplete="new-password"
+                           spellcheck="false" placeholder="Enter your API key for this analysis">
+                    <small class="field-help">Used for this analysis only. Leave blank to use the server configuration.
+                        Do not share or commit your API key.</small>
+                </div>
+            </section>
 
 
             <!-- STATIC CONFIGURATION -->

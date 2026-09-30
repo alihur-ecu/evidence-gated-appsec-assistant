@@ -172,6 +172,17 @@ document.addEventListener(
                     "staticAuthorised"
                 );
 
+            const llmProvider =
+                document.querySelector(
+                    '[name="llm_provider"]'
+                );
+
+            const llmApiKeyField =
+                document.getElementById("llmApiKeyField");
+
+            const llmApiKey =
+                document.getElementById("llmApiKey");
+
 
             const dynamicTargetUrl =
                 document.getElementById(
@@ -500,6 +511,11 @@ document.addEventListener(
 
             function updateValidation() {
 
+                if (llmApiKeyField) {
+                    llmApiKeyField.hidden =
+                        !llmProvider || !["openai", "gemini"].includes(llmProvider.value);
+                }
+
                 let ready = false;
 
                 let message =
@@ -543,6 +559,8 @@ document.addEventListener(
                             file
                             && fileInfo
                             && applicationName
+                            && llmProvider
+                            && ["openai", "gemini"].includes(llmProvider.value)
                             && authorised
                         );
 
@@ -563,6 +581,15 @@ document.addEventListener(
 
                         message =
                             "Enter an application name before continuing.";
+
+                    }
+                    else if (
+                        !llmProvider
+                        || !["openai", "gemini"].includes(llmProvider.value)
+                    ) {
+
+                        message =
+                            "Choose an LLM provider: OpenAI or Gemini.";
 
                     }
                     else if (!authorised) {
@@ -1041,6 +1068,8 @@ document.addEventListener(
             [
                 selectedApplicationName,
                 staticAuthorised,
+                llmProvider,
+                llmApiKey,
                 dynamicTargetUrl,
                 dynamicScope,
                 dynamicAuthorised,
@@ -1356,6 +1385,17 @@ document.addEventListener(
                                     : "false"
                                 );
 
+                                formData.append(
+                                    "llm_provider",
+                                    llmProvider
+                                    ? llmProvider.value
+                                    : ""
+                                );
+
+                                if (llmApiKey && llmApiKey.value.trim()) {
+                                    formData.append("llm_api_key", llmApiKey.value.trim());
+                                }
+
                                 response = await fetch(
                                     "/analysis/static",
                                     {
@@ -1444,6 +1484,11 @@ document.addEventListener(
                                     "authorised",
                                     "true"
                                 );
+
+                                formData.append("llm_provider", llmProvider ? llmProvider.value : "");
+                                if (llmApiKey && llmApiKey.value.trim()) {
+                                    formData.append("llm_api_key", llmApiKey.value.trim());
+                                }
 
                                 response = await fetch(
                                     "/analysis/dynamic",
@@ -1560,6 +1605,11 @@ document.addEventListener(
         const verificationMessage =
             document.getElementById(
                 "verificationMessage"
+            );
+
+        const verificationTargetUrl =
+            document.getElementById(
+                "verificationTargetUrl"
             );
 
 
@@ -1808,19 +1858,40 @@ document.addEventListener(
                     const originalText =
                         runVerificationButton.textContent;
 
+                    const runtimeUrl =
+                        verificationTargetUrl
+                            ? verificationTargetUrl.value.trim()
+                            : "";
+
+                    if (verificationTargetUrl && (!runtimeUrl || !verificationTargetUrl.checkValidity())) {
+                        verificationMessage.textContent =
+                            !runtimeUrl
+                                ? "Runtime target required: enter the authorised application's base URL so the Oracle can verify this proposal."
+                                : "Enter a valid http:// or https:// URL for the authorised running application.";
+                        verificationTargetUrl.focus();
+                        return;
+                    }
+
+                    if (verificationTargetUrl && !/^https?:\/\//i.test(runtimeUrl)) {
+                        verificationMessage.textContent =
+                            "Enter a valid http:// or https:// URL for the authorised running application.";
+                        verificationTargetUrl.focus();
+                        return;
+                    }
+
 
                     runVerificationButton.disabled =
                         true;
 
 
                     runVerificationButton.textContent =
-                        "Running Verification...";
+                        "Collecting Oracle Evidence...";
 
 
                     if (verificationMessage) {
 
                         verificationMessage.textContent =
-                            "Connecting to the local DVWA lab and collecting independent runtime evidence...";
+                            "The Oracle is checking this proposal and collecting independent evidence...";
 
                     }
 
@@ -1829,7 +1900,10 @@ document.addEventListener(
 
                         const result =
                             await postJson(
-                                `/findings/${findingId}/verify`
+                                `/findings/${findingId}/verify`,
+                                {
+                                    target_url: runtimeUrl
+                                }
                             );
 
 
@@ -1863,7 +1937,7 @@ document.addEventListener(
                         if (verificationMessage) {
 
                             verificationMessage.textContent =
-                                `Verification failed: ${error.message}`;
+                                `Oracle evidence could not be collected: ${error.message}`;
 
                         }
 

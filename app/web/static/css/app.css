@@ -1680,328 +1680,36 @@ button:disabled {
 }
 
 
-/* ==================================================================
-   FINDING WORKFLOW — view navigation only
-   Keeps persisted workflow state separate from the stage being viewed.
-   ================================================================== */
-.workflow-nav .workflow-stage {
-    appearance: none;
-    border: 0;
-    padding: 0;
-    background: transparent;
-    color: inherit;
+/* LLM provider selector — matches the application configuration controls. */
+.llm-provider-config {
+    margin-top: 22px;
+}
+
+.config-field > select {
+    width: 100%;
+    min-height: 46px;
+    padding: 0 42px 0 13px;
+    border: 1px solid #244b69;
+    border-radius: 9px;
+    background: #061522;
+    color: #e9f2fa;
     font: inherit;
     cursor: pointer;
+    color-scheme: dark;
 }
 
-.workflow-nav .workflow-stage:disabled {
-    opacity: 1;
-    cursor: not-allowed;
+.config-field > select:hover {
+    border-color: #316d92;
 }
 
-.workflow-nav .workflow-stage .workflow-circle,
-.workflow-nav .workflow-stage strong,
-.workflow-nav .workflow-stage span {
-    transition: border-color .18s ease, color .18s ease, background .18s ease, box-shadow .18s ease, opacity .18s ease;
-}
-
-/* Completed means the real workflow work already happened. */
-.workflow-nav .workflow-stage.is-complete .workflow-circle {
-    border-color: #1aa99f;
-}
-
-.workflow-nav .workflow-line.is-complete {
-    background: #1aa99f;
-}
-
-/* Current means only the stage the reviewer is looking at now. */
-.workflow-nav .workflow-stage.is-current .workflow-circle {
-    border-color: #23d7c0;
-    background: rgba(35, 215, 192, .08);
-    box-shadow: 0 0 0 4px rgba(35, 215, 192, .07);
-}
-
-.workflow-nav .workflow-stage.is-current strong {
-    color: #ffffff;
-}
-
-.workflow-nav .workflow-stage.is-current span {
-    color: #7fc9e9;
-}
-
-.workflow-nav .workflow-stage:not(.is-current):not(:disabled):hover .workflow-circle {
-    border-color: #5c91b8;
-}
-
-.workflow-nav .workflow-stage:not(.is-current):not(:disabled):hover strong {
-    color: #9bd8f4;
-}
-
-.workflow-nav .workflow-stage:disabled .workflow-circle {
-    border-color: #345878;
-}
-
-.workflow-nav .workflow-stage:disabled strong,
-.workflow-nav .workflow-stage:disabled span {
-    color: #6685a1;
-}
-
-.workflow-nav .workflow-stage:focus-visible {
-    outline: 2px solid #43a7d8;
-    outline-offset: 6px;
-    border-radius: 6px;
-}
-\n\n/* ==================================================================\n   LLM ASSESSMENT + HUMAN SEVERITY COMPARISON\n   Presentation-only enhancement. Does not change workflow behaviour.\n   ================================================================== */\n\n.proposal-location-facts {\n    grid-template-columns: repeat(3, minmax(0, 1fr));\n}\n\n.llm-assessment-block {\n    margin-top: 14px;\n    padding: 15px;\n    border: 1px solid #244d6c;\n    border-radius: 9px;\n    background: #081b2c;\n}\n\n.llm-assessment-heading {\n    display: flex;\n    align-items: flex-start;\n    justify-content: space-between;\n    gap: 12px;\n    margin-bottom: 12px;\n}\n\n.llm-assessment-heading h4 {\n    margin: 4px 0 0;\n    color: #eef6fc;\n    font-size: 14px;\n}\n\n.proposal-readonly-badge,\n.readonly-chip {\n    display: inline-flex;\n    align-items: center;\n    justify-content: center;\n    padding: 4px 7px;\n    border: 1px solid #355c78;\n    border-radius: 999px;\n    background: #0b2336;\n    color: #83b9dc;\n    font-size: 8px;\n    font-weight: 700;\n    letter-spacing: .08em;\n    white-space: nowrap;\n}\n\n.llm-assessment-grid {\n    display: grid;\n    grid-template-columns: repeat(2, minmax(0, 1fr));\n    gap: 10px;\n}\n\n.llm-assessment-item {\n    min-width: 0;\n    padding: 12px;\n    border-left: 2px solid #7658d7;\n    border-radius: 7px;\n    background: #061624;\n}\n\n.llm-assessment-item > span,\n.llm-context-row span {\n    display: block;\n    color: #70a8cf;\n    font-size: 10px;\n}\n\n.llm-assessment-item > strong {\n    display: block;\n    margin-top: 5px;\n    color: #f3f7fb;\n    font-size: 15px;\n}\n\n.llm-assessment-item > small {\n    display: block;\n    margin-top: 4px;\n    color: #668aa5;\n    font-size: 9px;\n    line-height: 1.4;\n}\n\n.llm-context-row {\n    display: grid;\n    grid-template-columns: minmax(0, 1fr) minmax(0, .7fr);\n    gap: 10px;\n    margin-top: 10px;\n    padding-top: 10px;\n    border-top: 1px solid #183a54;\n}\n\n.llm-context-row > div { min-width: 0; }\n.llm-context-row strong {\n    display: block;\n    margin-top: 4px;\n    color: #dfeaf3;\n    font-size: 11px;\n    overflow-wrap: anywhere;\n}\n\n.proposal-boundary-note {\n    margin-top: 12px;\n    padding: 12px 14px;\n    border: 1px solid #23445e;\n    border-radius: 8px;\n    background: rgba(7, 22, 36, .7);\n}\n\n.proposal-boundary-note p {\n    margin: 5px 0 0;\n    color: #7698b3;\n    font-size: 10px;\n    line-height: 1.5;\n}\n\n.severity-comparison {\n    margin-top: 12px;\n}\n\n.severity-comparison-heading {\n    margin-bottom: 11px;\n}\n\n.severity-comparison-heading p {\n    margin: 4px 0 0;\n    color: #7194af;\n    font-size: 10px;\n    line-height: 1.4;\n}\n\n.severity-comparison-grid {\n    display: grid;\n    grid-template-columns: minmax(0, 1fr) 26px minmax(0, 1fr);\n    gap: 10px;\n    align-items: stretch;\n}\n\n.severity-side {\n    min-width: 0;\n    padding: 13px;\n    border: 1px solid #244d6c;\n    border-radius: 9px;\n    background: #071827;\n}\n\n.llm-severity-side {\n    border-left: 2px solid #7658d7;\n}\n\n.reviewer-severity-side {\n    border-left: 2px solid #20b8ad;\n}\n\n.severity-side-label {\n    display: flex;\n    align-items: center;\n    justify-content: space-between;\n    gap: 8px;\n}\n\n.severity-side-label > span:first-child,\n.reviewer-severity-side label {\n    color: #7ca8c8;\n    font-size: 10px;\n}\n\n.llm-severity-side > strong {\n    display: block;\n    margin-top: 11px;\n    color: #f1f5fa;\n    font-size: 18px;\n}\n\n.reviewer-severity-side select {\n    width: 100%;\n    margin-top: 9px;\n    padding: 10px 11px;\n    border: 1px solid #315a78;\n    border-radius: 7px;\n    background: #061624;\n    color: #f0f6fb;\n    font-size: 12px;\n}\n\n.severity-side small {\n    display: block;\n    margin-top: 8px;\n    color: #688aa4;\n    font-size: 9px;\n    line-height: 1.45;\n}\n\n.severity-compare-arrow {\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    color: #557b98;\n    font-size: 17px;\n}\n\n@media (max-width: 1100px) {\n    .proposal-location-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }\n    .severity-comparison-grid { grid-template-columns: 1fr; }\n    .severity-compare-arrow { transform: rotate(90deg); min-height: 18px; }\n}\n\n@media (max-width: 700px) {\n    .proposal-location-facts,\n    .llm-assessment-grid,\n    .llm-context-row { grid-template-columns: 1fr; }\n}\n
-
-
-/* ==================================================================
-   FINDING DETAIL — LLM ASSESSMENT + REVIEWER SEVERITY COMPARISON
-   FINAL SCOPED OVERRIDE
-   Visual-only. Does not change workflow, verification, Home or JS.
-   ================================================================== */
-
-/* ---------- LLM assessment ---------- */
-.llm-panel .llm-assessment-block {
-    margin-top: 18px;
-    padding: 16px;
-    border: 1px solid #1d4564;
-    border-radius: 10px;
-    background: #081a2a;
-}
-
-.llm-panel .llm-assessment-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 13px;
-}
-
-.llm-panel .llm-assessment-heading h4 {
-    margin: 6px 0 0;
-    font-size: 15px;
-}
-
-.llm-panel .proposal-readonly-badge,
-.reviewer-panel .readonly-chip {
-    flex: 0 0 auto;
-    padding: 4px 7px;
-    border: 1px solid #51469a;
-    border-radius: 6px;
-    background: #201d49;
-    color: #c8c1ff;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: .05em;
-}
-
-.llm-panel .llm-assessment-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-}
-
-.llm-panel .llm-assessment-item {
-    min-width: 0;
-    padding: 12px 13px;
-    border: 1px solid #203e58;
-    border-left: 2px solid #6252c7;
-    border-radius: 8px;
-    background: #061522;
-}
-
-.llm-panel .llm-assessment-item span,
-.llm-panel .llm-assessment-item strong,
-.llm-panel .llm-assessment-item small {
-    display: block;
-}
-
-.llm-panel .llm-assessment-item span {
-    margin-bottom: 5px;
-    color: #77a8cd;
-    font-size: 10px;
-}
-
-.llm-panel .llm-assessment-item strong {
-    color: #f0f5fb;
-    font-size: 14px;
-    overflow-wrap: anywhere;
-}
-
-.llm-panel .llm-assessment-item small {
-    margin-top: 5px;
-    color: #6687a2;
-    font-size: 9px;
-    line-height: 1.4;
-}
-
-.llm-panel .llm-context-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.llm-panel .llm-context-row > div {
-    min-width: 0;
-    padding: 10px 12px;
-    border-radius: 8px;
-    background: #071624;
-}
-
-.llm-panel .llm-context-row span,
-.llm-panel .llm-context-row strong {
-    display: block;
-}
-
-.llm-panel .llm-context-row span {
-    margin-bottom: 4px;
-    color: #648ba9;
-    font-size: 10px;
-}
-
-.llm-panel .llm-context-row strong {
-    color: #dce8f2;
-    font-size: 12px;
-    overflow-wrap: anywhere;
-}
-
-.llm-panel .proposal-boundary-note {
-    margin-top: 12px;
-    padding: 13px 14px;
-    border-left: 3px solid #4b6690;
-    border-radius: 0 8px 8px 0;
-    background: #071827;
-}
-
-.llm-panel .proposal-boundary-note p {
-    margin: 6px 0 0;
-    color: #8da8be;
-    font-size: 11px;
-    line-height: 1.5;
-}
-
-/* ---------- Reviewer severity comparison ---------- */
-.reviewer-panel .severity-comparison {
-    margin-top: 4px;
-}
-
-.reviewer-panel .severity-comparison-heading {
-    margin-bottom: 13px;
-}
-
-.reviewer-panel .severity-comparison-heading p {
-    margin: 7px 0 0;
-    color: #86a4bc;
-    font-size: 12px;
-    line-height: 1.45;
-}
-
-.reviewer-panel .severity-comparison-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
-    gap: 10px;
-    align-items: stretch;
-}
-
-.reviewer-panel .severity-side {
-    min-width: 0;
-    padding: 14px;
-    border: 1px solid #203f59;
-    border-radius: 9px;
-    background: #071624;
-}
-
-.reviewer-panel .llm-severity-side {
-    border-left: 2px solid #6252c7;
-}
-
-.reviewer-panel .reviewer-severity-side {
-    border-left: 2px solid #239a91;
-}
-
-.reviewer-panel .severity-side-label {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 10px;
-}
-
-.reviewer-panel .severity-side-label > span:first-child,
-.reviewer-panel .reviewer-severity-side > label {
-    color: #7fa7c5;
-    font-size: 10px;
-    font-weight: 700;
-}
-
-.reviewer-panel .severity-side > strong {
-    display: block;
-    color: #ffffff;
-    font-size: 18px;
-    line-height: 1.1;
-}
-
-.reviewer-panel .severity-side > small {
-    display: block;
-    margin-top: 8px;
-    color: #6f8ca5;
-    font-size: 9px;
-    line-height: 1.45;
-}
-
-.reviewer-panel .reviewer-severity-side > label {
-    display: block;
-    margin-bottom: 9px;
-}
-
-.reviewer-panel .reviewer-severity-side > select {
-    width: 100%;
-    min-height: 40px;
-    padding: 8px 10px;
-    border: 1px solid #2b5878;
-    border-radius: 7px;
-    background: #061522;
-    color: #eef5fb;
-    cursor: pointer;
-}
-
-.reviewer-panel .reviewer-severity-side > select:hover {
-    border-color: #39779c;
-}
-
-.reviewer-panel .reviewer-severity-side > select:focus {
+.config-field > select:focus {
+    border-color: #318ab2;
     outline: none;
-    border-color: #2da99f;
 }
 
-.reviewer-panel .severity-compare-arrow {
-    display: grid;
-    place-items: center;
-    color: #5d829f;
-    font-size: 18px;
-}
-
-/* Keep both decision panels visually balanced. */
-.decision-grid > .panel {
-    min-width: 0;
-}
-
-/* Responsive only for these new components. */
-@media (max-width: 900px) {
-    .llm-panel .llm-assessment-grid,
-    .llm-panel .llm-context-row {
-        grid-template-columns: 1fr;
-    }
-
-    .reviewer-panel .severity-comparison-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .reviewer-panel .severity-compare-arrow {
-        transform: rotate(90deg);
-        min-height: 22px;
-    }
+.config-field > select option {
+    background: #061522;
+    color: #e9f2fa;
 }
 
 
@@ -2197,4 +1905,250 @@ button:disabled {
         flex-direction: column;
         gap: 8px;
     }
+}
+
+/* ==================================================================
+   FINDING DETAIL — final layout safeguards
+   Keeps AI proposal and Oracle evidence visually separate.
+   ================================================================== */
+.finding-title-row,
+.summary-grid,
+.workflow,
+.analysis-grid,
+.human-review-section {
+    box-sizing: border-box;
+}
+
+.workflow.workflow-nav {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    margin: 32px 0;
+}
+
+.workflow.workflow-nav .workflow-step,
+.workflow.workflow-nav a.workflow-step,
+.workflow.workflow-nav div.workflow-step {
+    min-width: 145px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #dce9f4;
+    text-align: center;
+    text-decoration: none;
+}
+
+.workflow.workflow-nav .workflow-step strong {
+    display: block;
+    color: #e7f0f7;
+    font-size: 14px;
+    line-height: 1.25;
+}
+
+.workflow.workflow-nav .workflow-step span {
+    display: block;
+    margin-top: 5px;
+    color: #72a4cc;
+    font-size: 11px;
+    line-height: 1.25;
+}
+
+.workflow.workflow-nav .workflow-circle {
+    width: 42px;
+    height: 42px;
+    margin: 0 auto 9px;
+    border: 2px solid #345878;
+    border-radius: 50%;
+    background: #071624 !important;
+    color: #edf5fb;
+    display: grid;
+    place-items: center;
+    box-shadow: none !important;
+}
+
+.workflow.workflow-nav .workflow-step.active .workflow-circle {
+    border-color: #23d7c0;
+    box-shadow: 0 0 0 3px rgba(35, 215, 192, .08) !important;
+}
+
+.workflow.workflow-nav .workflow-line {
+    flex: 1 1 auto;
+    min-width: 28px;
+    height: 1px;
+    background: #31506b;
+}
+
+.workflow.workflow-nav .workflow-line.active-line {
+    background: #1bb6ab;
+}
+
+.analysis-grid {
+    display: grid;
+    grid-template-columns: minmax(0, .95fr) minmax(0, 1.35fr);
+    gap: 18px;
+    align-items: start;
+}
+
+.analysis-grid > .panel {
+    min-width: 0;
+    height: 100%;
+}
+
+.llm-panel,
+.evidence-panel {
+    overflow: hidden;
+}
+
+.proposal-facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.verification-ready {
+    grid-template-columns: 42px minmax(0, 1fr);
+    align-items: start;
+}
+
+.verification-ready > div,
+.verification-ready p,
+.verification-ready h4,
+.verification-ready span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.runtime-target-field {
+    grid-column: 1 / -1;
+    padding: 14px;
+    border: 1px solid #28516f;
+    border-radius: 9px;
+    background: #091d2d;
+}
+
+.runtime-target-field label,
+.runtime-target-field label span,
+.runtime-target-field small {
+    display: block;
+}
+
+.runtime-target-field label {
+    color: #dce9f4;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.runtime-target-field label span {
+    margin-top: 3px;
+    color: #6e9abb;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+.runtime-target-field input {
+    width: 100%;
+    min-height: 42px;
+    margin-top: 10px;
+    padding: 9px 11px;
+    border: 1px solid #2b5878;
+    border-radius: 7px;
+    background: #061522;
+    color: #edf5fb;
+    font: inherit;
+}
+
+.runtime-target-field input:focus {
+    outline: none;
+    border-color: #31b8ae;
+    box-shadow: 0 0 0 2px rgba(49, 184, 174, .12);
+}
+
+.runtime-target-field small {
+    margin-top: 8px;
+    color: #7597b3;
+    font-size: 10px;
+    line-height: 1.45;
+}
+
+.verification-action {
+    min-height: 42px;
+    white-space: normal;
+}
+
+@media (max-width: 900px) {
+    .analysis-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .workflow.workflow-nav .workflow-step {
+        min-width: 105px;
+    }
+}
+
+@media (max-width: 650px) {
+    .workflow.workflow-nav {
+        align-items: flex-start;
+        overflow-x: auto;
+        padding-bottom: 8px;
+    }
+
+    .workflow.workflow-nav .workflow-step {
+        min-width: 100px;
+    }
+
+    .workflow.workflow-nav .workflow-line {
+        min-width: 24px;
+        margin-top: 21px;
+    }
+}
+
+/* Home analysis cards: make the mode name clear beside its icon. */
+.mode-identity {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    min-height: 58px;
+    margin-top: 25px;
+}
+.mode-identity .mode-icon {
+    flex: 0 0 58px;
+    width: 58px;
+    height: 58px;
+    margin-top: 0;
+}
+.mode-identity .mode-type {
+    margin-top: 0;
+    color: #9ad0f3;
+    font-size: clamp(18px, 1.8vw, 25px);
+    line-height: 1.15;
+    letter-spacing: 0.02em;
+}
+.analysis-mode-card.selected .mode-identity .mode-type {
+    color: #b5f5eb;
+}
+.mode-identity + h2 {
+    margin-top: 22px;
+}
+
+/* Give provider guidance and the key field their own breathing room. */
+.llm-provider-config .field-help {
+    line-height: 1.6;
+    margin-top: 10px;
+}
+.llm-provider-config #llmApiKeyField:not([hidden]) {
+    margin-top: 24px;
+}
+.llm-provider-config #llmApiKeyField > label {
+    margin-bottom: 12px;
+    gap: 12px;
+}
+.llm-provider-config #llmApiKeyField .field-help {
+    margin-top: 10px;
+}
+@media (max-width: 480px) {
+    .mode-identity { gap: 14px; }
+    .mode-identity .mode-type { font-size: 18px; }
 }

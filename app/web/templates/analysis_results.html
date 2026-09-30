@@ -37,7 +37,8 @@
                         Runtime discovery and LLM proposal analysis completed.
                         Candidate findings require independent evidence before verification.
                     {% elif analysis.provider == "STATIC_SOURCE" %}
-                        Source code has been prepared for candidate analysis.
+                        Source preparation and LLM proposal analysis completed.
+                        Candidate findings remain unverified until independent evidence is collected.
                     {% else %}
                         Candidate findings are proposals only.
                         Independent verification has not run yet.
@@ -90,8 +91,8 @@
             </div>
 
             <div>
-                <span>CONTEXT SOURCE</span>
-                <strong>{{ analysis.context_source }}</strong>
+                <span>LLM PROVIDER</span>
+                <strong>{{ analysis.proposal_provider or "—" }}</strong>
             </div>
 
             <div>
@@ -218,8 +219,13 @@
                             Open a finding to continue to independent
                             verification and human review.
                         {% elif analysis.provider == "STATIC_SOURCE" %}
-                            Source preparation is complete.
-                            Candidate generation has not run yet.
+                            {% if analysis.proposal_status == "PARTIAL" %}
+                                Candidate generation completed partially; some contexts could not be analysed.
+                            {% elif analysis.proposal_status == "DISABLED" %}
+                                Candidate generation is disabled because no live proposer was selected.
+                            {% else %}
+                                The selected LLM completed candidate analysis and returned no findings.
+                            {% endif %}
                         {% else %}
                             No candidate findings are available for this analysis.
                         {% endif %}
@@ -327,14 +333,21 @@
                 <div class="analysis-empty-state">
 
                     <strong>
-                        Source context prepared successfully.
+                        Static analysis completed with no candidate findings.
                     </strong>
 
                     <p>
-                        The uploaded project was safely processed and
-                        converted into bounded source-code context.
-                        No vulnerability proposals have been generated yet
-                        because a live proposer is not connected at this stage.
+                        The uploaded project was safely processed into bounded
+                        source-code context and submitted to
+                        <strong>{{ analysis.proposal_provider or "the selected LLM" }}</strong>.
+                        {% if analysis.proposal_status == "PARTIAL" %}
+                            Some contexts could not be analysed, so this result is partial.
+                        {% elif analysis.proposal_status == "DISABLED" %}
+                            Candidate generation was disabled for this run.
+                        {% else %}
+                            The proposer returned no candidate findings. This does not
+                            prove that the application is free of vulnerabilities.
+                        {% endif %}
                     </p>
 
                     {% if analysis.context_coverage %}

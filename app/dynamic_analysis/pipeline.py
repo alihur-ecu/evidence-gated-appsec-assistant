@@ -76,6 +76,8 @@ class DynamicAnalysisPipeline:
         discovery: DynamicDiscovery | None = None,
         context_builder: DynamicContextBuilder | None = None,
         proposer: Any | None = None,
+        provider_name: str | None = None,
+        api_key: str | None = None,
     ) -> None:
         self.discovery = (
             discovery
@@ -92,7 +94,7 @@ class DynamicAnalysisPipeline:
         self.proposer = (
             proposer
             if proposer is not None
-            else create_static_proposer()
+            else create_static_proposer(provider_name=provider_name, api_key=api_key)
         )
 
     def run(
@@ -320,6 +322,8 @@ def run_dynamic_analysis(
     discovery: DynamicDiscovery | None = None,
     context_builder: DynamicContextBuilder | None = None,
     proposer: Any | None = None,
+    provider_name: str | None = None,
+    api_key: str | None = None,
 ) -> dict[str, Any]:
     """
     Convenience entry point for web/API integration.
@@ -332,6 +336,8 @@ def run_dynamic_analysis(
         discovery=discovery,
         context_builder=context_builder,
         proposer=proposer,
+        provider_name=provider_name,
+        api_key=api_key,
     )
 
     result = pipeline.run(

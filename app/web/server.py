@@ -23,11 +23,55 @@ in this web layer. Local labs are used only by dedicated validation scripts.
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
+from urllib.parse import urljoin, urlsplit
 from tempfile import TemporaryDirectory
 import csv
 import json
 import uuid
 import time
+import os
+
+
+def _load_local_env() -> None:
+    """Load missing environment variables from the project .env file.
+
+    The browser selects the LLM provider per analysis request. Environment
+    credentials provide a fallback when a request does not include a key.
+    Existing process environment variables take precedence over .env values.
+    """
+    env_path = Path(__file__).resolve().parents[2] / ".env"
+    if not env_path.is_file():
+        return
+
+    try:
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+
+            if not key:
+                continue
+
+            if (
+                len(value) >= 2
+                and value[0] == value[-1]
+                and value[0] in {"\"", "'"}
+            ):
+                value = value[1:-1]
+
+            os.environ.setdefault(key, value)
+    except OSError:
+        # Environment loading is a convenience for local development. The
+        # provider layer remains responsible for reporting missing secrets.
+        return
+
+
+_load_local_env()
 
 from flask import (
     Flask,
@@ -60,6 +104,11 @@ from app.models.finding import (
 from app.dynamic_analysis.verification_service import (
     DynamicVerificationService,
     DynamicVerificationError,
+)
+
+from app.dynamic_analysis.verification_router import (
+    VerificationReadiness,
+    route_finding_for_verification,
 )
 
 
@@ -427,6 +476,12 @@ def build_view_model(
         )
     )
 
+    verification_route = (
+        route_finding_for_verification(
+            finding
+        )
+    )
+
     return {
         "finding_id":
             finding.finding_id,
@@ -550,11 +605,34 @@ def build_view_model(
                 "human_decision"
             ),
 
+        # Verification availability is capability-driven. The web layer
+        # does not decide support from a vulnerability-specific if/elif chain.
         "verification_supported":
+            verification_route.can_verify,
+
+        "verification_readiness":
+            verification_route.readiness.value,
+
+        "verification_capability":
+            verification_route.capability_id,
+
+        "verification_verifier":
+            verification_route.verifier_id,
+
+        "verification_mode":
             (
-                finding.finding_type
-                == FindingType.SQL_INJECTION
+                verification_route.mode.value
+                if verification_route.mode
+                else None
             ),
+
+        "verification_missing_fields":
+            list(
+                verification_route.missing_fields
+            ),
+
+        "verification_reason":
+            verification_route.reason,
     }
 
 
@@ -690,6 +768,23 @@ def start_static_analysis():
     source_file = request.files.get("source_file")
     application_name = request.form.get("application_name", "").strip()
     authorised = request.form.get("authorised") == "true"
+    llm_provider = request.form.get("llm_provider", "").strip().lower()
+    llm_api_key = request.form.get("llm_api_key", "").strip() or None
+
+    # The UI requires an explicit provider. Do not silently fall back to the
+    # process-level LLM_PROVIDER because that would make the user selection
+    # non-transparent.
+    if not llm_provider:
+        return jsonify({
+            "ok": False,
+            "error": "Choose an LLM provider: OpenAI or Gemini.",
+        }), 400
+
+    if llm_provider is not None and llm_provider not in {"openai", "gemini"}:
+        return jsonify({
+            "ok": False,
+            "error": "Choose a supported LLM provider: OpenAI or Gemini.",
+        }), 400
 
     if source_file is None or not source_file.filename:
         return jsonify({"ok": False, "error": "A source file is required."}), 400
@@ -711,7 +806,40 @@ def start_static_analysis():
                 source_path=str(source_path),
                 original_filename=original_filename,
                 application_name=application_name,
+                llm_provider=llm_provider,
+                llm_api_key=llm_api_key,
             )
+
+        proposal_status = str(analysis_result.get("proposal_status", "SUCCESS")).upper()
+        proposal_execution = analysis_result.get("proposal_execution") or {}
+        if proposal_status == "FAILED":
+            failed_chunks = proposal_execution.get("failed_chunks", []) or []
+            first_failure = failed_chunks[0] if failed_chunks else {}
+            status_code = first_failure.get("status_code")
+            if status_code == 429:
+                message = (
+                    "Static source preparation completed, but the selected LLM "
+                    "provider reached its rate limit. No security conclusion has "
+                    "been made. Please retry later or choose another provider."
+                )
+                http_status = 429
+                code = "LLM_RATE_LIMITED"
+            else:
+                message = (
+                    "Static source preparation completed, but the selected LLM "
+                    "proposal stage could not complete. No security conclusion "
+                    "has been made."
+                )
+                http_status = 502
+                code = "LLM_PROPOSAL_FAILED"
+            return jsonify({
+                "ok": False,
+                "stage": "PROPOSAL_FAILED",
+                "code": code,
+                "error": message,
+                "provider": analysis_result.get("proposal_provider") or llm_provider.upper(),
+                "source_preparation_completed": True,
+            }), http_status
 
         findings = register_analysis_result(analysis_result)
 
@@ -727,7 +855,18 @@ def start_static_analysis():
             ),
         })
     except Exception as error:
-        return jsonify({"ok": False, "error": str(error)}), 500
+        print(
+        f"[STATIC] FAILED: {type(error).__name__}: {error}",
+        flush=True,
+    )
+
+    return jsonify({
+        "ok": False,
+        "error": (
+            "Static analysis could not complete with the selected provider."
+            if llm_api_key else str(error)
+        ),
+    }), 500
 
 
 # ======================================================================
@@ -748,6 +887,14 @@ def start_dynamic_analysis():
     target_url = str(data.get("target_url", "")).strip()
     application_name = str(data.get("application_name", "")).strip()
     analysis_scope = str(data.get("analysis_scope", "")).strip()
+    llm_provider = str(data.get("llm_provider", "")).strip().lower() or None
+    llm_api_key = str(data.get("llm_api_key", "")).strip() or None
+
+    if llm_provider is not None and llm_provider not in {"openai", "gemini"}:
+        return jsonify({
+            "ok": False,
+            "error": "Choose a supported LLM provider: OpenAI or Gemini.",
+        }), 400
 
     authorised_value = data.get("authorised")
     authorised = (
@@ -823,6 +970,8 @@ def start_dynamic_analysis():
             target_url=target_url,
             application_name=application_name,
             discovery=discovery,
+            provider_name=llm_provider,
+            api_key=llm_api_key,
         )
         trace(
             "8. Dynamic pipeline complete "
@@ -950,11 +1099,17 @@ def start_dynamic_analysis():
         }), 400
 
     except Exception as error:
-        trace(f"FAILED: {type(error).__name__}: {error}")
-        app.logger.exception("Dynamic analysis request failed")
+        if llm_api_key:
+            trace(f"FAILED: {type(error).__name__}")
+        else:
+            trace(f"FAILED: {type(error).__name__}: {error}")
+            app.logger.exception("Dynamic analysis request failed")
         return jsonify({
             "ok": False,
-            "error": str(error),
+            "error": (
+                "Dynamic analysis could not complete with the selected provider."
+                if llm_api_key else str(error)
+            ),
         }), 500
 
 
@@ -1041,24 +1196,146 @@ def verify_finding(
         finding_id
     )
 
-    if finding.finding_type != FindingType.SQL_INJECTION:
+    verification_route = (
+        route_finding_for_verification(
+            finding
+        )
+    )
+
+    if (
+        verification_route.readiness
+        is VerificationReadiness.CONTEXT_REQUIRED
+    ):
         return jsonify({
             "ok": False,
-            "error": (
-                "Dynamic verification is currently implemented "
-                "for SQL Injection only."
-            ),
+            "code": "VERIFICATION_CONTEXT_REQUIRED",
+            "verification_readiness":
+                verification_route.readiness.value,
+            "capability":
+                verification_route.capability_id,
+            "verifier":
+                verification_route.verifier_id,
+            "missing_fields":
+                list(
+                    verification_route.missing_fields
+                ),
+            "error":
+                verification_route.reason,
+        }), 409
+
+    if (
+        verification_route.readiness
+        is VerificationReadiness.UNSUPPORTED
+    ):
+        return jsonify({
+            "ok": False,
+            "code": "VERIFICATION_UNSUPPORTED",
+            "verification_readiness":
+                verification_route.readiness.value,
+            "error":
+                verification_route.reason,
         }), 400
+
+    if (
+        verification_route.readiness
+        is VerificationReadiness.NOT_ELIGIBLE
+    ):
+        return jsonify({
+            "ok": False,
+            "code": "VERIFICATION_NOT_ELIGIBLE",
+            "verification_readiness":
+                verification_route.readiness.value,
+            "error":
+                verification_route.reason,
+        }), 409
+
+    if not verification_route.can_verify:
+        return jsonify({
+            "ok": False,
+            "code": "VERIFICATION_NOT_READY",
+            "verification_readiness":
+                verification_route.readiness.value,
+            "error": (
+                "Independent verification is not ready "
+                "for this finding."
+            ),
+        }), 409
 
     try:
         metadata = FINDING_METADATA.get(finding_id, {})
         analysis_id = metadata.get("analysis_id")
         analysis_session = ANALYSIS_SESSIONS.get(analysis_id)
 
+        # Static analysis can legitimately propose a relative route such as
+        # /product. Runtime verification, however, must operate against an
+        # authorised running application. The browser may therefore provide
+        # a runtime base URL for this verification request. We build a
+        # temporary verification finding and leave the LLM proposal unchanged.
+        request_data = request.get_json(silent=True) or {}
+        runtime_target_url = str(
+            request_data.get("target_url", "")
+        ).strip()
+
+        verification_finding = finding
+        endpoint = (finding.endpoint or "").strip()
+        endpoint_parts = urlsplit(endpoint)
+
+        if not endpoint_parts.scheme or not endpoint_parts.netloc:
+            if not runtime_target_url:
+                return jsonify({
+                    "ok": False,
+                    "code": "RUNTIME_TARGET_REQUIRED",
+                    "error": (
+                        "This finding came from source analysis and its endpoint "
+                        "is relative. Enter the authorised running application "
+                        "URL before collecting independent runtime evidence."
+                    ),
+                }), 409
+
+            target_parts = urlsplit(runtime_target_url)
+            if target_parts.scheme not in {"http", "https"} or not target_parts.netloc:
+                return jsonify({
+                    "ok": False,
+                    "code": "INVALID_RUNTIME_TARGET",
+                    "error": (
+                        "Runtime target must be a complete http:// or https:// URL "
+                        "with a hostname."
+                    ),
+                }), 400
+
+            absolute_endpoint = urljoin(
+                runtime_target_url.rstrip("/") + "/",
+                endpoint.lstrip("/"),
+            )
+            verification_finding = replace(
+                finding,
+                endpoint=absolute_endpoint,
+            )
+
+        if (
+            verification_route.verifier_id
+            != "injection_differential"
+        ):
+            return jsonify({
+                "ok": False,
+                "code": "VERIFICATION_EXECUTOR_UNAVAILABLE",
+                "verification_readiness":
+                    verification_route.readiness.value,
+                "capability":
+                    verification_route.capability_id,
+                "verifier":
+                    verification_route.verifier_id,
+                "error": (
+                    "A verification capability was selected, "
+                    "but no web execution adapter is registered "
+                    "for its verifier."
+                ),
+            }), 501
+
         service = DynamicVerificationService(
             session=analysis_session,
         )
-        result = service.verify(finding)
+        result = service.verify(verification_finding)
 
         # The verifier result becomes the canonical verification status.
         # Human review remains a separate later decision.
