@@ -866,7 +866,6 @@ class OpenAIStaticProposer(StaticProposer):
             f"{source_code}\n"
             "SOURCE CODE END\n"
         )
-
     @staticmethod
     def _build_context_prompt(
         *,
@@ -876,8 +875,13 @@ class OpenAIStaticProposer(StaticProposer):
         """
         Build a provider prompt from one generic analysis context.
 
-        Metadata is treated as provenance only. The prompt does not
-        prescribe any specific vulnerability family.
+        Metadata is treated as provenance only.
+
+        For dynamic analysis, additional guidance reminds the model
+        that this stage proposes candidate security hypotheses only.
+        Independent evidence verification occurs later.
+
+        No specific vulnerability family is prescribed.
         """
 
         metadata_json = json.dumps(
@@ -886,6 +890,49 @@ class OpenAIStaticProposer(StaticProposer):
             ensure_ascii=False,
             default=str,
         )
+
+        dynamic_guidance = ""
+
+        if (
+            str(context.scan_type)
+            .strip()
+            .upper()
+            == "DYNAMIC"
+        ):
+            dynamic_guidance = (
+                "DYNAMIC PROPOSAL GUIDANCE\n"
+                "This context contains observations from a running "
+                "application.\n"
+                "\n"
+                "Your role at this stage is to generate reasonable "
+                "candidate security hypotheses for later independent "
+                "verification.\n"
+                "\n"
+                "A candidate does not need exploit proof or "
+                "deterministic verification at this proposal stage.\n"
+                "\n"
+                "When the observed context contains a concrete "
+                "user-controlled input surface, such as a form field, "
+                "query parameter, path value, URL value, identifier, "
+                "file input, redirect destination, or another "
+                "externally controlled value, consider whether the "
+                "observations reasonably support a candidate "
+                "application-security vulnerability.\n"
+                "\n"
+                "The candidate must still be grounded in the supplied "
+                "observations. Do not invent hidden backend behaviour, "
+                "database use, operating-system command execution, "
+                "authorization failures, or other implementation "
+                "details that were not observed.\n"
+                "\n"
+                "A proposal is NOT evidence that the vulnerability "
+                "exists and must never be described as verified, "
+                "confirmed, proved, or exploited.\n"
+                "\n"
+                "If the supplied context does not support a reasonable "
+                "security hypothesis, return no finding.\n"
+                "\n"
+            )
 
         return (
             "APPLICATION CONTEXT\n"
@@ -899,6 +946,7 @@ class OpenAIStaticProposer(StaticProposer):
             "PROVENANCE / METADATA\n"
             f"{metadata_json}\n"
             "\n"
+            f"{dynamic_guidance}"
             "TASK\n"
             "Inspect this bounded analysis context "
             "for reasonable candidate "
@@ -916,6 +964,7 @@ class OpenAIStaticProposer(StaticProposer):
             f"{context.content}\n"
             "CONTEXT END\n"
         )
+    
 
     @staticmethod
     def _normalise_context_proposal(

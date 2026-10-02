@@ -167,6 +167,14 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
         except (AttributeError, IndexError, TypeError):
             return {"findings": []}
 
+        print(
+            "\n"
+            "================ LM STUDIO RAW RESPONSE ================\n"
+            f"{text}\n"
+            "========================================================\n",
+            flush=True,
+        )
+
         if not isinstance(text, str) or not text.strip():
             return {"findings": []}
 

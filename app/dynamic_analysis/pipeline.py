@@ -38,6 +38,9 @@ from app.dynamic_analysis.discovery import DynamicDiscovery
 from app.dynamic_analysis.target import DynamicTarget, build_dynamic_target
 
 
+MAX_DYNAMIC_LLM_CONTEXTS = 6
+
+
 @dataclass
 class DynamicPipelineResult:
     """
@@ -94,7 +97,10 @@ class DynamicAnalysisPipeline:
         self.proposer = (
             proposer
             if proposer is not None
-            else create_static_proposer(provider_name=provider_name, api_key=api_key)
+            else create_static_proposer(
+                provider_name=provider_name,
+                api_key=api_key,
+            )
         )
 
     def run(
@@ -132,17 +138,30 @@ class DynamicAnalysisPipeline:
                 flush=True,
             )
 
+        # -------------------------------------------------------------
+        # 1. TARGET
+        # -------------------------------------------------------------
+
         trace("1. Pipeline run entered")
 
         trace("2. Building and validating DynamicTarget")
+
         target = build_dynamic_target(target_url)
+
         trace(
             "3. DynamicTarget ready "
-            f"(base_url={target.base_url!r}, start_path={target.start_path!r})"
+            f"(base_url={target.base_url!r}, "
+            f"start_path={target.start_path!r})"
         )
 
+        # -------------------------------------------------------------
+        # 2. BOUNDED DISCOVERY
+        # -------------------------------------------------------------
+
         trace("4. Starting bounded dynamic discovery")
+
         discovery_result = self.discovery.discover(target)
+
         trace(
             "5. Dynamic discovery complete "
             f"(pages={len(discovery_result.pages)}, "
@@ -150,41 +169,209 @@ class DynamicAnalysisPipeline:
             f"forms={len(discovery_result.forms)})"
         )
 
+        # -------------------------------------------------------------
+        # 3. DYNAMIC CONTEXT
+        # -------------------------------------------------------------
+
         trace("6. Starting dynamic context construction")
+
         context_result = self.context_builder.build(
             discovery_result
         )
+
         trace(
             "7. Dynamic context construction complete "
             f"(contexts={len(context_result.contexts)})"
         )
 
+        # -------------------------------------------------------------
+        # 4. ADAPT TO GENERIC ANALYSIS CONTEXT
+        # -------------------------------------------------------------
+
         trace("8. Starting AnalysisContext adaptation")
+
         analysis_contexts = adapt_dynamic_contexts(
             context_result.contexts
         )
+
+        original_context_count = len(analysis_contexts)
+
+        # -------------------------------------------------------------
+        # 5. PRIORITISE THE MOST RELEVANT DYNAMIC CONTEXTS
+        # -------------------------------------------------------------
+        #
+        # Do NOT simply take the first six contexts.
+        #
+        # Prefer:
+        #   1. Context belonging to the exact user-selected target path.
+        #   2. Context containing parameters.
+        #   3. Forms.
+        #   4. Endpoints.
+        #   5. GET/POST request contexts.
+        #
+        # This does NOT decide whether a vulnerability exists.
+        # It only decides which observations are most useful to send
+        # to the LLM.
+        # -------------------------------------------------------------
+
+        target_path = str(
+            getattr(target, "start_path", "") or ""
+        ).rstrip("/") or "/"
+
+        def dynamic_context_priority(context: Any) -> int:
+            metadata = context.metadata or {}
+
+            source_url = str(
+                metadata.get("source_url") or ""
+            )
+
+            endpoint_url = str(
+                metadata.get("endpoint_url") or ""
+            )
+
+            context_type = str(
+                metadata.get("context_type") or ""
+            ).lower()
+
+            parameters = (
+                metadata.get("parameters")
+                or []
+            )
+
+            method = str(
+                metadata.get("method") or ""
+            ).upper()
+
+            score = 0
+
+            # Strongest priority:
+            # exact requested area of the application.
+            related_to_target = any(
+                target_path in candidate
+                for candidate in (
+                    endpoint_url,
+                    source_url,
+                )
+                if candidate
+            )
+
+            if related_to_target:
+                score += 100
+
+            # Parameters are valuable because they represent
+            # user-controlled input.
+            if parameters:
+                score += 30
+
+            # Forms are especially useful dynamic observations.
+            if "form" in context_type:
+                score += 20
+
+            # Explicit endpoints are also useful.
+            if "endpoint" in context_type:
+                score += 15
+
+            # Standard request methods receive a small preference.
+            if method in {"GET", "POST"}:
+                score += 5
+
+            return score
+
+        analysis_contexts = sorted(
+            analysis_contexts,
+            key=dynamic_context_priority,
+            reverse=True,
+        )
+
+        if (
+            len(analysis_contexts)
+            > MAX_DYNAMIC_LLM_CONTEXTS
+        ):
+            trace(
+                "9a. Prioritising and limiting LLM contexts "
+                f"from {len(analysis_contexts)} "
+                f"to {MAX_DYNAMIC_LLM_CONTEXTS}"
+            )
+
+        analysis_contexts = analysis_contexts[
+            :MAX_DYNAMIC_LLM_CONTEXTS
+        ]
+
+        # Log exactly which contexts were selected.
+        # This helps us confirm that the target endpoint and
+        # important parameters reached the LLM.
+        for index, context in enumerate(
+            analysis_contexts,
+            start=1,
+        ):
+            metadata = context.metadata or {}
+
+            parameter_names: list[str] = []
+
+            for parameter in metadata.get(
+                "parameters",
+                [],
+            ):
+                if isinstance(parameter, dict):
+                    name = str(
+                        parameter.get("name", "")
+                    ).strip()
+
+                    if name:
+                        parameter_names.append(name)
+
+            trace(
+                f"9b. Selected LLM context {index}: "
+                f"type={metadata.get('context_type')!r}, "
+                f"source={metadata.get('source_url')!r}, "
+                f"endpoint={metadata.get('endpoint_url')!r}, "
+                f"method={metadata.get('method')!r}, "
+                f"parameters={parameter_names!r}"
+            )
+
         trace(
             "9. AnalysisContext adaptation complete "
-            f"(contexts={len(analysis_contexts)})"
+            f"(prepared={original_context_count}, "
+            f"selected={len(analysis_contexts)})"
         )
+
+        # -------------------------------------------------------------
+        # 6. LLM PROPOSAL
+        # -------------------------------------------------------------
 
         trace(
             "10. Starting LLM proposal stage "
             f"(provider={self._provider_name()!r}, "
             f"contexts={len(analysis_contexts)})"
         )
+
         proposals = self._propose(
             application_name=application_name,
             contexts=analysis_contexts,
         )
-        proposal_execution = self._proposal_execution_report()
-        proposal_status = self._proposal_status(proposal_execution)
-        trace(
-            "11. LLM proposal stage complete "
-            f"(status={proposal_status}, proposals={len(proposals)})"
+
+        proposal_execution = (
+            self._proposal_execution_report()
         )
 
-        trace("12. Serialising dynamic pipeline result")
+        proposal_status = self._proposal_status(
+            proposal_execution
+        )
+
+        trace(
+            "11. LLM proposal stage complete "
+            f"(status={proposal_status}, "
+            f"proposals={len(proposals)})"
+        )
+
+        # -------------------------------------------------------------
+        # 7. RETURN RESULT
+        # -------------------------------------------------------------
+
+        trace(
+            "12. Serialising dynamic pipeline result"
+        )
+
         return DynamicPipelineResult(
             target=self._target_to_dict(target),
             discovery=discovery_result.to_dict(),
@@ -236,35 +423,99 @@ class DynamicAnalysisPipeline:
 
         return proposals
 
+    def _proposal_execution_report(
+        self,
+    ) -> dict[str, Any] | None:
+        """
+        Return non-secret provider execution metadata when available.
+        """
 
-    def _proposal_execution_report(self) -> dict[str, Any] | None:
-        """Return non-secret provider execution metadata when available."""
-        report = getattr(self.proposer, "last_execution_report", None)
+        report = getattr(
+            self.proposer,
+            "last_execution_report",
+            None,
+        )
+
         if not isinstance(report, dict):
             return None
+
         return {
-            "chunks_attempted": int(report.get("chunks_attempted", 0) or 0),
-            "chunks_succeeded": int(report.get("chunks_succeeded", 0) or 0),
-            "chunks_failed": int(report.get("chunks_failed", 0) or 0),
-            "failed_chunks": list(report.get("failed_chunks", []) or []),
+            "chunks_attempted": int(
+                report.get(
+                    "chunks_attempted",
+                    0,
+                )
+                or 0
+            ),
+            "chunks_succeeded": int(
+                report.get(
+                    "chunks_succeeded",
+                    0,
+                )
+                or 0
+            ),
+            "chunks_failed": int(
+                report.get(
+                    "chunks_failed",
+                    0,
+                )
+                or 0
+            ),
+            "failed_chunks": list(
+                report.get(
+                    "failed_chunks",
+                    [],
+                )
+                or []
+            ),
         }
 
     @staticmethod
     def _proposal_status(
         report: dict[str, Any] | None,
     ) -> str:
-        """Classify proposal execution without confusing failure with zero findings."""
+        """
+        Classify proposal execution without confusing
+        execution failure with zero findings.
+        """
+
         if not isinstance(report, dict):
             return "SUCCESS"
 
-        attempted = int(report.get("chunks_attempted", 0) or 0)
-        succeeded = int(report.get("chunks_succeeded", 0) or 0)
-        failed = int(report.get("chunks_failed", 0) or 0)
+        attempted = int(
+            report.get(
+                "chunks_attempted",
+                0,
+            )
+            or 0
+        )
 
-        if attempted > 0 and failed > 0 and succeeded == 0:
+        succeeded = int(
+            report.get(
+                "chunks_succeeded",
+                0,
+            )
+            or 0
+        )
+
+        failed = int(
+            report.get(
+                "chunks_failed",
+                0,
+            )
+            or 0
+        )
+
+        if (
+            attempted > 0
+            and failed > 0
+            and succeeded == 0
+        ):
             return "FAILED"
+
         if failed > 0:
             return "PARTIAL"
+
         return "SUCCESS"
 
     @staticmethod
