@@ -780,7 +780,7 @@ def start_static_analysis():
             "error": "Choose an LLM provider: OpenAI or Gemini.",
         }), 400
 
-    if llm_provider is not None and llm_provider not in {"openai", "gemini"}:
+    if llm_provider is not None and llm_provider not in {"openai", "gemini", "lmstudio"}:
         return jsonify({
             "ok": False,
             "error": "Choose a supported LLM provider: OpenAI or Gemini.",
@@ -855,13 +855,18 @@ def start_static_analysis():
             ),
         })
     except Exception as error:
-        return jsonify({
-            "ok": False,
-            "error": (
-                "Static analysis could not complete with the selected provider."
-                if llm_api_key else str(error)
-            ),
-        }), 500
+        print(
+        f"[STATIC] FAILED: {type(error).__name__}: {error}",
+        flush=True,
+    )
+
+    return jsonify({
+        "ok": False,
+        "error": (
+            "Static analysis could not complete with the selected provider."
+            if llm_api_key else str(error)
+        ),
+    }), 500
 
 
 # ======================================================================
@@ -885,10 +890,10 @@ def start_dynamic_analysis():
     llm_provider = str(data.get("llm_provider", "")).strip().lower() or None
     llm_api_key = str(data.get("llm_api_key", "")).strip() or None
 
-    if llm_provider is not None and llm_provider not in {"openai", "gemini"}:
+    if llm_provider is not None and llm_provider not in {"openai", "gemini", "lmstudio"}:
         return jsonify({
             "ok": False,
-            "error": "Choose a supported LLM provider: OpenAI or Gemini.",
+            "error": "Choose a supported LLM provider: OpenAI, Gemini, or LM Studio.",
         }), 400
 
     authorised_value = data.get("authorised")

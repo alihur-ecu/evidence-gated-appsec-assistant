@@ -560,7 +560,7 @@ document.addEventListener(
                             && fileInfo
                             && applicationName
                             && llmProvider
-                            && ["openai", "gemini"].includes(llmProvider.value)
+                            && ["openai", "gemini", "lmstudio"].includes(llmProvider.value)
                             && authorised
                         );
 
@@ -585,11 +585,11 @@ document.addEventListener(
                     }
                     else if (
                         !llmProvider
-                        || !["openai", "gemini"].includes(llmProvider.value)
+                        || !["openai", "gemini", "lmstudio"].includes(llmProvider.value)
                     ) {
 
                         message =
-                            "Choose an LLM provider: OpenAI or Gemini.";
+                            "Choose an LLM provider: OpenAI, Gemini, or LM Studio.";
 
                     }
                     else if (!authorised) {

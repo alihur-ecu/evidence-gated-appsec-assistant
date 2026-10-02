@@ -2,7 +2,7 @@
 Factory for configured static vulnerability proposers.
 
 The rest of the application must not depend directly on Gemini,
-OpenAI, Azure OpenAI, or another LLM implementation.
+OpenAI, Azure OpenAI, LM Studio, or another LLM implementation.
 
 Provider-specific modules are imported lazily so optional SDK
 dependencies are required only when that provider is selected.
@@ -19,6 +19,7 @@ SUPPORTED_LLM_PROVIDERS = {
     "none",
     "gemini",
     "openai",
+    "lmstudio",
     "azure_openai",
     "custom",
 }
@@ -27,13 +28,6 @@ SUPPORTED_LLM_PROVIDERS = {
 class NoOpStaticProposer(StaticProposer):
     """
     Proposer used when live LLM candidate generation is disabled.
-
-    This is useful for:
-
-    - development;
-    - source-ingestion testing;
-    - offline environments;
-    - deployments where an LLM has not yet been configured.
     """
 
     provider_name = "NONE"
@@ -51,15 +45,7 @@ def get_configured_llm_provider() -> str:
     """
     Return the configured LLM provider name.
 
-    LLM_PROVIDER is intentionally independent from ANALYSIS_PROVIDER.
-
-    Example:
-
-        ANALYSIS_PROVIDER=static_source
-        LLM_PROVIDER=gemini
-
-    The first selects the analysis path. The second selects the model
-    used to propose candidates within that path.
+    LLM_PROVIDER is independent from ANALYSIS_PROVIDER.
     """
 
     return os.getenv(
@@ -74,14 +60,6 @@ def create_static_proposer(
 ) -> StaticProposer:
     """
     Create the configured static proposer.
-
-    Provider modules are imported only when required. This prevents a
-    deployment using one provider from requiring every supported LLM
-    SDK to be installed.
-
-    Providers that are architecturally reserved but not implemented
-    yet fail explicitly rather than silently falling back to another
-    model.
     """
 
     selected_provider = (
@@ -128,6 +106,20 @@ def create_static_proposer(
 
         return OpenAIStaticProposer(api_key=api_key)
 
+    if selected_provider == "lmstudio":
+        try:
+            from app.analysis.proposers.lmstudio import (
+                LMStudioStaticProposer,
+            )
+        except ImportError as exc:
+            raise RuntimeError(
+                "LM Studio proposer dependencies are not available. "
+                "Install the OpenAI SDK before using "
+                "LLM_PROVIDER=lmstudio."
+            ) from exc
+
+        return LMStudioStaticProposer(api_key=api_key)
+
     if selected_provider == "azure_openai":
         raise NotImplementedError(
             "The Azure OpenAI static proposer is reserved but has "
@@ -140,7 +132,6 @@ def create_static_proposer(
             "been implemented yet."
         )
 
-    # Defensive fallback.
     raise RuntimeError(
         f"Could not create LLM provider '{selected_provider}'."
     )

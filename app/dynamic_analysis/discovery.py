@@ -46,7 +46,7 @@ from app.dynamic_analysis.target import DynamicTarget
 
 
 DEFAULT_REQUEST_TIMEOUT = 10
-DEFAULT_MAX_PAGES = 20
+DEFAULT_MAX_PAGES = 10
 DEFAULT_MAX_RESPONSE_BYTES = 1_000_000
 
 DISCOVERY_USER_AGENT = "Evidence-Gated-AppSec/0.1 Discovery"
