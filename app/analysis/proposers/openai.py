@@ -323,28 +323,21 @@ class OpenAIStaticProposer(StaticProposer):
                     "chunks_failed"
                 ] += 1
 
+                status_code = self._extract_status_code(exc)
                 self.last_execution_report[
                     "failed_chunks"
                 ].append(
                     {
-                        "chunk_id":
-                            chunk.get(
-                                "chunk_id"
-                            ),
-                        "source_file":
-                            chunk.get(
-                                "source_file"
-                            ),
-                        "status_code":
-                            self._extract_status_code(
-                                exc
-                            ),
-                        "error_type":
-                            type(exc).__name__,
-                        "error":
-                            str(exc),
+                        "chunk_id": chunk.get("chunk_id"),
+                        "source_file": chunk.get("source_file"),
+                        "status_code": status_code,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
                     }
                 )
+
+                if status_code == 429:
+                    break
 
                 continue
 

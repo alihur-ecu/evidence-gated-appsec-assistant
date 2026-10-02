@@ -42,6 +42,8 @@ def run_static_analysis(
     source_path: str,
     original_filename: str,
     application_name: str,
+    llm_provider: str | None = None,
+    llm_api_key: str | None = None,
 ) -> dict:
     """
     Run the configured static-analysis path.
@@ -120,7 +122,9 @@ def run_static_analysis(
         # With LLM_PROVIDER=none this path performs no external model
         # calls and returns zero candidate findings.
         result = run_static_proposal_pipeline(
-            prepared_analysis=prepared_analysis
+            prepared_analysis=prepared_analysis,
+            provider_name=llm_provider,
+            api_key=llm_api_key,
         )
 
     else:

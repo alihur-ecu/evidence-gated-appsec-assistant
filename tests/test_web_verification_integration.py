@@ -153,3 +153,173 @@ def test_verify_route_rejects_unsupported_finding_type():
     payload = response.get_json()
     assert payload["ok"] is False
     assert finding.status is FindingStatus.PROPOSED
+
+
+def test_view_model_exposes_ready_verification_route():
+    finding = _finding()
+
+    server.EVIDENCE_BY_FINDING.clear()
+    server.REVIEW_BY_FINDING.clear()
+
+    view_model = server.build_view_model(finding)
+
+    assert view_model["verification_supported"] is True
+    assert view_model["verification_readiness"] == "READY"
+    assert view_model["verification_capability"] == "INJECTION_DIFFERENTIAL"
+    assert view_model["verification_verifier"] == "injection_differential"
+    assert view_model["verification_mode"] == "RUNTIME"
+    assert view_model["verification_missing_fields"] == []
+    assert (
+        view_model["verification_reason"]
+        == "Independent verification capability is ready."
+    )
+
+
+def test_verify_route_reports_context_required_without_running_service(
+    monkeypatch,
+):
+    finding = Finding(
+        finding_id="WEB-SQL-CONTEXT-001",
+        finding_type=FindingType.SQL_INJECTION,
+        endpoint=None,
+        method=None,
+        parameter="id",
+        explanation="Static SQL injection proposal without runtime route context.",
+        status=FindingStatus.PROPOSED,
+    )
+
+    server.FINDINGS.clear()
+    server.FINDING_METADATA.clear()
+    server.EVIDENCE_BY_FINDING.clear()
+    server.REVIEW_BY_FINDING.clear()
+    server.FINDINGS[finding.finding_id] = finding
+
+    class ServiceMustNotRun:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError(
+                "DynamicVerificationService must not run when context is missing."
+            )
+
+    monkeypatch.setattr(
+        server,
+        "DynamicVerificationService",
+        ServiceMustNotRun,
+    )
+
+    client = server.app.test_client()
+    response = client.post(
+        f"/findings/{finding.finding_id}/verify"
+    )
+
+    assert response.status_code == 409
+    payload = response.get_json()
+
+    assert payload["ok"] is False
+    assert payload["code"] == "VERIFICATION_CONTEXT_REQUIRED"
+    assert payload["verification_readiness"] == "CONTEXT_REQUIRED"
+    assert payload["capability"] == "INJECTION_DIFFERENTIAL"
+    assert payload["verifier"] == "injection_differential"
+    assert payload["missing_fields"] == ["endpoint", "method"]
+    assert finding.status is FindingStatus.PROPOSED
+    assert finding.finding_id not in server.EVIDENCE_BY_FINDING
+
+
+def test_verify_route_reports_unsupported_xss_without_fabricating_evidence(
+    monkeypatch,
+):
+    finding = Finding(
+        finding_id="WEB-XSS-ROUTER-001",
+        finding_type=FindingType.XSS,
+        endpoint="https://example.test/profile",
+        method="POST",
+        parameter="bio",
+        explanation="Candidate XSS proposal.",
+        status=FindingStatus.PROPOSED,
+    )
+
+    server.FINDINGS.clear()
+    server.FINDING_METADATA.clear()
+    server.EVIDENCE_BY_FINDING.clear()
+    server.REVIEW_BY_FINDING.clear()
+    server.FINDINGS[finding.finding_id] = finding
+
+    class ServiceMustNotRun:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError(
+                "DynamicVerificationService must not run for an unsupported capability."
+            )
+
+    monkeypatch.setattr(
+        server,
+        "DynamicVerificationService",
+        ServiceMustNotRun,
+    )
+
+    client = server.app.test_client()
+    response = client.post(
+        f"/findings/{finding.finding_id}/verify"
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+
+    assert payload["ok"] is False
+    assert payload["code"] == "VERIFICATION_UNSUPPORTED"
+    assert payload["verification_readiness"] == "UNSUPPORTED"
+    assert finding.status is FindingStatus.PROPOSED
+    assert finding.finding_id not in server.EVIDENCE_BY_FINDING
+
+    view_model = server.build_view_model(finding)
+
+    assert view_model["verification_supported"] is False
+    assert view_model["verification_readiness"] == "UNSUPPORTED"
+    assert view_model["verification_capability"] is None
+    assert view_model["verification_verifier"] is None
+    assert view_model["verification_missing_fields"] == []
+
+
+def test_verify_route_rejects_non_proposed_finding_as_not_eligible(
+    monkeypatch,
+):
+    finding = Finding(
+        finding_id="WEB-NOT-ELIGIBLE-001",
+        finding_type=FindingType.SQL_INJECTION,
+        endpoint="https://example.test/search",
+        method="GET",
+        parameter="q",
+        explanation="Already verified candidate.",
+        status=FindingStatus.PROVED,
+    )
+
+    server.FINDINGS.clear()
+    server.FINDING_METADATA.clear()
+    server.EVIDENCE_BY_FINDING.clear()
+    server.REVIEW_BY_FINDING.clear()
+    server.FINDINGS[finding.finding_id] = finding
+
+    class ServiceMustNotRun:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError(
+                "DynamicVerificationService must not re-run a non-PROPOSED finding."
+            )
+
+    monkeypatch.setattr(
+        server,
+        "DynamicVerificationService",
+        ServiceMustNotRun,
+    )
+
+    client = server.app.test_client()
+    response = client.post(
+        f"/findings/{finding.finding_id}/verify"
+    )
+
+    assert response.status_code == 409
+    payload = response.get_json()
+
+    assert payload["ok"] is False
+    assert payload["code"] == "VERIFICATION_NOT_ELIGIBLE"
+    assert payload["verification_readiness"] == "NOT_ELIGIBLE"
+    assert finding.status is FindingStatus.PROVED
+    assert finding.finding_id not in server.EVIDENCE_BY_FINDING
+

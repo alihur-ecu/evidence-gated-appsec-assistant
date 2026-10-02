@@ -40,6 +40,7 @@ def run_static_proposal_pipeline(
     proposer: StaticProposer | None = None,
     budget: LLMExecutionBudget | None = None,
     provider_name: str | None = None,
+    api_key: str | None = None,
 ) -> dict[str, Any]:
     """
     Analyse prepared bounded source context using a configured proposer.
@@ -124,7 +125,8 @@ def run_static_proposal_pipeline(
         proposer
         if proposer is not None
         else create_static_proposer(
-            provider_name=provider_name
+            provider_name=provider_name,
+            api_key=api_key,
         )
     )
 
@@ -210,5 +212,21 @@ def run_static_proposal_pipeline(
     result["proposal_provider"] = (
         selected_proposer.provider_name
     )
+
+    attempted = int(llm_execution.get("chunks_attempted", 0) or 0)
+    succeeded = int(llm_execution.get("chunks_succeeded", 0) or 0)
+    failed = int(llm_execution.get("chunks_failed", 0) or 0)
+
+    if selected_proposer.provider_name == "NONE":
+        proposal_status = "DISABLED"
+    elif attempted > 0 and failed > 0 and succeeded == 0:
+        proposal_status = "FAILED"
+    elif failed > 0:
+        proposal_status = "PARTIAL"
+    else:
+        proposal_status = "SUCCESS"
+
+    result["proposal_status"] = proposal_status
+    result["proposal_execution"] = deepcopy(llm_execution)
 
     return result
