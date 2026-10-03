@@ -156,7 +156,10 @@ class DynamicAnalysisPipeline:
         )
         trace(
             "7. Dynamic context construction complete "
-            f"(contexts={len(context_result.contexts)})"
+            f"(created={context_result.contexts_created}, "
+            f"selected={context_result.contexts_selected}, "
+            f"excluded_by_budget={context_result.contexts_excluded_by_budget}, "
+            f"selected_chars={context_result.selected_chars})"
         )
 
         trace("8. Starting AnalysisContext adaptation")

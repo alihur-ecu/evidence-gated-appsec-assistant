@@ -107,6 +107,42 @@ document.addEventListener(
                 );
 
 
+            const analysisProgressPanel = document.getElementById("analysisProgressPanel");
+            const analysisProgressStage = document.getElementById("analysisProgressStage");
+            const analysisProgressPercent = document.getElementById("analysisProgressPercent");
+            const analysisProgressTrack = document.getElementById("analysisProgressTrack");
+            const analysisProgressFill = document.getElementById("analysisProgressFill");
+            const analysisProgressMessage = document.getElementById("analysisProgressMessage");
+            const analysisProgressCounter = document.getElementById("analysisProgressCounter");
+
+            function renderAnalysisProgress(state) {
+                if (!analysisProgressPanel) return;
+                analysisProgressPanel.hidden = false;
+                const value = Math.max(0, Math.min(100, Number(state.progress || 0)));
+                if (analysisProgressStage) analysisProgressStage.textContent = state.stage_label || "Analysis in progress";
+                if (analysisProgressPercent) analysisProgressPercent.textContent = `${value}%`;
+                if (analysisProgressFill) analysisProgressFill.style.width = `${value}%`;
+                if (analysisProgressTrack) analysisProgressTrack.setAttribute("aria-valuenow", String(value));
+                if (analysisProgressMessage) analysisProgressMessage.textContent = state.message || "Analysis in progress...";
+                if (analysisProgressCounter) {
+                    const total = Number(state.llm_total || 0);
+                    const completed = Number(state.llm_completed || 0);
+                    analysisProgressCounter.textContent = total > 0 ? `${completed} / ${total} LLM items completed` : "";
+                }
+            }
+
+            async function waitForAnalysisJob(jobId) {
+                while (true) {
+                    const statusResponse = await fetch(`/analysis/jobs/${encodeURIComponent(jobId)}`, { cache: "no-store" });
+                    const state = await statusResponse.json();
+                    if (!statusResponse.ok || !state.ok) throw new Error(state.error || "Unable to read analysis progress.");
+                    renderAnalysisProgress(state);
+                    if (state.status === "COMPLETED") return state;
+                    if (state.status === "FAILED") throw new Error(state.error || state.message || "Analysis failed.");
+                    await new Promise(resolve => window.setTimeout(resolve, 700));
+                }
+            }
+
             const staticSourceFile =
                 document.getElementById(
                     "staticSourceFile"
@@ -1397,7 +1433,7 @@ document.addEventListener(
                                 }
 
                                 response = await fetch(
-                                    "/analysis/static",
+                                    "/analysis/static/job",
                                     {
                                         method: "POST",
                                         body: formData
@@ -1491,7 +1527,7 @@ document.addEventListener(
                                 }
 
                                 response = await fetch(
-                                    "/analysis/dynamic",
+                                    "/analysis/dynamic/job",
                                     {
                                         method: "POST",
                                         body: formData
@@ -1517,6 +1553,11 @@ document.addEventListener(
                                     error:
                                         "The server returned an invalid response."
                                 };
+                            }
+
+                            if (response.ok && result.ok && result.job_id) {
+                                renderAnalysisProgress({ progress: 3, stage_label: "Analysis queued", message: "Analysis accepted. Waiting for the first real stage..." });
+                                result = await waitForAnalysisJob(result.job_id);
                             }
 
                             if (
@@ -1858,27 +1899,6 @@ document.addEventListener(
                     const originalText =
                         runVerificationButton.textContent;
 
-                    const runtimeUrl =
-                        verificationTargetUrl
-                            ? verificationTargetUrl.value.trim()
-                            : "";
-
-                    if (verificationTargetUrl && (!runtimeUrl || !verificationTargetUrl.checkValidity())) {
-                        verificationMessage.textContent =
-                            !runtimeUrl
-                                ? "Runtime target required: enter the authorised application's base URL so the Oracle can verify this proposal."
-                                : "Enter a valid http:// or https:// URL for the authorised running application.";
-                        verificationTargetUrl.focus();
-                        return;
-                    }
-
-                    if (verificationTargetUrl && !/^https?:\/\//i.test(runtimeUrl)) {
-                        verificationMessage.textContent =
-                            "Enter a valid http:// or https:// URL for the authorised running application.";
-                        verificationTargetUrl.focus();
-                        return;
-                    }
-
 
                     runVerificationButton.disabled =
                         true;
@@ -1901,9 +1921,7 @@ document.addEventListener(
                         const result =
                             await postJson(
                                 `/findings/${findingId}/verify`,
-                                {
-                                    target_url: runtimeUrl
-                                }
+                                {}
                             );
 
 

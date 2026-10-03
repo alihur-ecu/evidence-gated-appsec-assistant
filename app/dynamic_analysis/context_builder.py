@@ -50,8 +50,12 @@ from app.dynamic_analysis.discovery import (
 )
 
 
-DEFAULT_MAX_CONTEXTS = 100
-DEFAULT_MAX_CONTEXT_CHARS = 100_000
+# The discovery layer remains complete; this budget only limits how many
+# deterministic context units are forwarded to the LLM in one analysis pass.
+# A bounded default prevents local/remote providers from receiving dozens of
+# sequential requests while coverage metadata still reports everything found.
+DEFAULT_MAX_CONTEXTS = 12
+DEFAULT_MAX_CONTEXT_CHARS = 40_000
 
 
 @dataclass(frozen=True)
@@ -189,6 +193,16 @@ class DynamicContextBuilder:
             self._build_candidate_contexts(
                 discovery
             )
+        )
+
+        # Prioritisation is deliberately generic and deterministic. It uses
+        # only runtime observations already collected by discovery; it does
+        # not infer a vulnerability, inspect a target name, or special-case
+        # any application. Rich input-bearing surfaces are considered first
+        # because they give the proposer more useful observed context per LLM
+        # call. All candidates still contribute to coverage metadata below.
+        candidate_contexts = self._prioritise_contexts(
+            candidate_contexts
         )
 
         total_context_chars = sum(
@@ -360,6 +374,53 @@ class DynamicContextBuilder:
             endpoint_index += 1
 
         return contexts
+
+    @staticmethod
+    def _prioritise_contexts(
+        contexts: list[DynamicContext],
+    ) -> list[DynamicContext]:
+        """
+        Order contexts by generic observed analysis value.
+
+        The ranking is intentionally vulnerability-agnostic and target-agnostic.
+        It never searches for DVWA paths, CWE identifiers, SQL/XSS keywords, or
+        expected findings. Stable original order is used as the final tie-breaker.
+        """
+
+        indexed_contexts = list(enumerate(contexts))
+
+        def ranking(item: tuple[int, DynamicContext]) -> tuple[int, int, int, int, int]:
+            original_index, context = item
+            method = (context.method or "GET").upper()
+            parameter_count = len(context.parameters)
+
+            # Forms carry explicit input structure. Parameters are the next
+            # strongest generic signal of user-controlled application surface.
+            is_form = 1 if context.context_type.upper() == "FORM" else 0
+            has_parameters = 1 if parameter_count else 0
+
+            # Non-GET/HEAD methods often represent richer application actions.
+            # This is only an ordering hint, never a vulnerability conclusion.
+            stateful_method = 1 if method not in {"GET", "HEAD", "OPTIONS"} else 0
+
+            has_http_observation = 1 if context.http_observation else 0
+
+            return (
+                -is_form,
+                -has_parameters,
+                -parameter_count,
+                -stateful_method,
+                -has_http_observation,
+                original_index,
+            )
+
+        return [
+            context
+            for _, context in sorted(
+                indexed_contexts,
+                key=ranking,
+            )
+        ]
 
     @staticmethod
     def _context_from_form(

@@ -93,7 +93,7 @@ def test_sql_injection_with_runtime_context_is_ready():
     )
 
 
-def test_registered_capability_reports_missing_context_without_fabricating_it():
+def test_static_sql_injection_routes_to_static_source_verifier():
 
     route = (
         route_finding_for_verification(
@@ -110,22 +110,29 @@ def test_registered_capability_reports_missing_context_without_fabricating_it():
 
     assert (
         route.readiness
-        is VerificationReadiness.CONTEXT_REQUIRED
+        is VerificationReadiness.READY
     )
 
-    assert route.can_verify is False
+    assert route.can_verify is True
 
     assert (
         route.capability_id
-        == "INJECTION_DIFFERENTIAL"
+        == "STATIC_SQL_INJECTION_SOURCE"
+    )
+
+    assert (
+        route.verifier_id
+        == "static_sql_injection_source"
+    )
+
+    assert (
+        route.mode
+        is VerificationMode.STATIC
     )
 
     assert (
         route.missing_fields
-        == (
-            "endpoint",
-            "method",
-        )
+        == ()
     )
 
 
@@ -406,14 +413,89 @@ def test_duplicate_capability_id_is_rejected():
         )
 
 
-def test_ambiguous_capability_mapping_fails_explicitly():
+def test_capabilities_for_different_modes_are_not_ambiguous():
+
+    runtime_capability = VerificationCapability(
+        capability_id=
+            "XSS_RUNTIME",
+
+        verifier_id=
+            "xss_runtime",
+
+        mode=
+            VerificationMode.RUNTIME,
+
+        finding_types=
+            frozenset({
+                FindingType.XSS,
+            }),
+    )
+
+    static_capability = VerificationCapability(
+        capability_id=
+            "XSS_STATIC",
+
+        verifier_id=
+            "xss_static",
+
+        mode=
+            VerificationMode.STATIC,
+
+        finding_types=
+            frozenset({
+                FindingType.XSS,
+            }),
+    )
+
+    router = VerificationRouter(
+        (
+            runtime_capability,
+            static_capability,
+        )
+    )
+
+    runtime_route = router.route(
+        _finding(
+            finding_type=
+                FindingType.XSS,
+
+            scan_type=
+                ScanType.DYNAMIC,
+        )
+    )
+
+    static_route = router.route(
+        _finding(
+            finding_type=
+                FindingType.XSS,
+
+            scan_type=
+                ScanType.STATIC,
+
+            endpoint=None,
+            method=None,
+        )
+    )
+
+    assert (
+        runtime_route.capability_id
+        == "XSS_RUNTIME"
+    )
+
+    assert (
+        static_route.capability_id
+        == "XSS_STATIC"
+    )
+
+
+def test_ambiguous_capability_mapping_within_same_mode_fails_explicitly():
 
     first = VerificationCapability(
         capability_id=
-            "XSS_A",
+            "XSS_RUNTIME_A",
 
         verifier_id=
-            "xss_a",
+            "xss_runtime_a",
 
         mode=
             VerificationMode.RUNTIME,
@@ -426,13 +508,13 @@ def test_ambiguous_capability_mapping_fails_explicitly():
 
     second = VerificationCapability(
         capability_id=
-            "XSS_B",
+            "XSS_RUNTIME_B",
 
         verifier_id=
-            "xss_b",
+            "xss_runtime_b",
 
         mode=
-            VerificationMode.STATIC,
+            VerificationMode.RUNTIME,
 
         finding_types=
             frozenset({
@@ -456,7 +538,10 @@ def test_ambiguous_capability_mapping_fails_explicitly():
         router.route(
             _finding(
                 finding_type=
-                    FindingType.XSS
+                    FindingType.XSS,
+
+                scan_type=
+                    ScanType.DYNAMIC,
             )
         )
 

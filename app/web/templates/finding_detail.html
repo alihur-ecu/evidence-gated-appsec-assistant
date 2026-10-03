@@ -356,41 +356,41 @@ Finding Proposed
 
                 {% if finding.verification_status != "COMPLETED" %}
                 <div class="verification-ready">
-                    {% if finding.verification_supported %}
+                    {% if finding.runtime_verification_supported %}
                     <div class="verification-ready-icon">✓</div>
                     <div>
                         <span class="eyebrow">ORACLE READY</span>
                         <h4>Verify this LLM proposal</h4>
                         <p>
-                            The Oracle runs deterministic checks independently of the LLM proposal.
-                            Its evidence is shown here for the human reviewer; it does not make the
-                            final human decision.
+                            The Runtime Oracle uses the authorised target and session already captured
+                            by the dynamic analysis. No target URL needs to be entered again. Its evidence
+                            is shown here for the human reviewer; it does not make the final human decision.
                         </p>
                     </div>
 
-                    {% if not (finding.endpoint.startswith('http://') or finding.endpoint.startswith('https://')) %}
-                    <div class="runtime-target-field">
-                        <label for="verificationTargetUrl">
-                            Runtime target for Oracle verification
-                            <span>Required when the proposed endpoint is a relative path</span>
-                        </label>
-                        <input
-                            id="verificationTargetUrl"
-                            type="url"
-                            placeholder="http://localhost:4280/"
-                            autocomplete="off"
-                            aria-describedby="verificationTargetHelp"
-                        >
-                        <small id="verificationTargetHelp">
-                            The proposal refers to <strong>{{ finding.endpoint }}</strong>. Enter the base URL
-                            of the authorised running application so the Oracle can test this specific claim.
-                            The Oracle collects and displays the evidence automatically; this URL is not evidence.
-                        </small>
-                    </div>
-                    {% endif %}
-
                     <button id="runVerificationButton" class="verification-action">Collect Oracle Evidence</button>
                     <p id="verificationMessage" class="verification-message"></p>
+                    {% elif finding.static_verification_supported %}
+                    <div class="verification-ready-icon">✓</div>
+                    <div>
+                        <span class="eyebrow">STATIC ORACLE READY</span>
+                        <h4>Verify this source-code proposal</h4>
+                        <p>
+                            The Static Oracle uses the source context already retained by the static analysis.
+                            No runtime URL is required. Independent source observations are shown to the human
+                            reviewer and the Oracle does not make the final human decision.
+                        </p>
+                    </div>
+                    <button id="runVerificationButton" class="verification-action">Collect Static Oracle Evidence</button>
+                    <p id="verificationMessage" class="verification-message"></p>
+                    {% elif finding.static_verification_pending %}
+                    <div class="verification-ready-icon muted-icon">!</div>
+                    <div>
+                        <span class="eyebrow">STATIC ORACLE</span>
+                        <h4>Additional source context is required</h4>
+                        <p>The proposal is preserved, but deterministic source verification cannot run without the required retained source context.</p>
+                    </div>
+                    <button disabled class="verification-action disabled-action">Static verification unavailable</button>
                     {% else %}
                     <div class="verification-ready-icon muted-icon">!</div>
                     <div>
@@ -400,6 +400,7 @@ Finding Proposed
                     </div>
                     <button disabled class="verification-action disabled-action">Verification unavailable</button>
                     {% endif %}
+
                 </div>
 
                 {% else %}
@@ -433,17 +434,32 @@ Finding Proposed
                         <span>{{ finding.method }} {{ finding.endpoint }}</span>
                         <span>Parameter: <strong>{{ finding.parameter }}</strong></span>
                     </div>
-                    <p>The Oracle is testing whether controlled changes to this parameter produce behaviour consistent with the proposed finding.</p>
+                    <p>
+                        {% if finding.evidence_source == "STATIC" %}
+                        The Static Oracle is checking retained source context for deterministic observations relevant to the proposed finding.
+                        {% else %}
+                        The Runtime Oracle is testing whether controlled changes to this parameter produce behaviour consistent with the proposed finding.
+                        {% endif %}
+                    </p>
                 </div>
 
                 <div class="evidence-cards">
                     {% for test in finding.evidence %}
-                    <article class="evidence-card">
+                    <article class="evidence-card{% if finding.evidence_source == 'RUNTIME' and test.database_error_detected %} oracle-signal{% endif %}">
                         <div class="evidence-card-top">
                             <span class="evidence-number">EVIDENCE {{ '%02d'|format(loop.index) }}</span>
-                            <span class="evidence-observed">OBSERVED</span>
+                            <span class="evidence-observed {% if finding.evidence_source == 'STATIC' and test.result != 'OBSERVED' %}not-established{% endif %}">{% if finding.evidence_source == "STATIC" %}{{ test.result }}{% else %}OBSERVED{% endif %}</span>
                         </div>
                         <h4>{{ test.name }}</h4>
+                        {% if finding.evidence_source == "STATIC" %}
+                        <p class="evidence-purpose">{{ test.baseline }}</p>
+                        <div class="evidence-result-row">
+                            <span>Deterministic observation</span>
+                            <strong>{{ test.result }}</strong>
+                            <small>{{ test.observed }}</small>
+                        </div>
+                        <p class="evidence-metric-help">This observation comes from retained source context, not from the LLM proposal and not from a runtime HTTP request.</p>
+                        {% else %}
                         <p class="evidence-purpose">
                             {% if loop.index == 1 %}
                             Establishes normal application behaviour before SQL conditions are introduced.
@@ -469,6 +485,18 @@ Finding Proposed
                             </div>
                         </div>
                         <p class="evidence-metric-help">HTTP shows how the target responded. Database error reports whether an explicit DB error signature was observed.</p>
+                        <div class="evidence-mini-grid">
+                            <div title="Exact value sent for the candidate parameter during this observation.">
+                                <span>Payload / test value</span>
+                                <strong>{{ test.payload if test.payload else 'Not retained' }}</strong>
+                            </div>
+                            <div title="Deterministic signal classified independently from the LLM proposal.">
+                                <span>Oracle signal</span>
+                                <strong>{{ test.error_family if test.error_family else 'NONE' }}</strong>
+                            </div>
+                        </div>
+                        {% if test.database_error_detected %}<span class="evidence-signal-badge">DETERMINISTIC SIGNAL OBSERVED{% if test.error_signature %} · {{ test.error_signature }}{% endif %}</span>{% endif %}
+                        {% endif %}
                     </article>
                     {% endfor %}
                 </div>
@@ -477,9 +505,9 @@ Finding Proposed
                     <span class="eyebrow">VERIFICATION CONCLUSION</span>
                     <h4>
                         {% if finding.evidence_gate_result == "PROVED" %}
-                        Behavioural evidence supports the SQL Injection proposal
+                        Independent evidence supports the proposed finding
                         {% elif finding.evidence_gate_result == "REFUTED" %}
-                        Behavioural evidence does not support the SQL Injection proposal
+                        Independent evidence does not support the proposed finding
                         {% else %}
                         Evidence is insufficient for a deterministic conclusion
                         {% endif %}
@@ -490,15 +518,35 @@ Finding Proposed
                 <details class="technical-evidence">
                     <summary>
                         <strong>View technical evidence</strong>
-                        <span>Requests, payloads and raw response excerpts</span>
+                        <span>{% if finding.evidence_source == "STATIC" %}Source observations and retained code excerpts{% else %}Requests, payloads and raw response excerpts{% endif %}</span>
                     </summary>
                     <div class="technical-evidence-content">
                         {% for test in finding.evidence %}
                         <article class="technical-test">
                             <header><div><small>{{ test.test_id }}</small><strong>{{ test.name }}</strong></div></header>
-                            <div class="technical-field"><span>Payload</span><pre>{{ test.payload }}</pre></div>
+                            {% if finding.evidence_source == "STATIC" %}
+                            <div class="technical-field"><span>Deterministic check</span><pre>{{ test.request }}</pre></div>
+                            <details class="raw-response static-source-details">
+                                <summary>View retained source excerpt</summary>
+                                {% if test.source_lines %}
+                                <div class="source-code-evidence">
+                                    {% for line in test.source_lines %}
+                                    <div class="source-code-line {% if line.highlight %}source-code-line-highlight{% endif %}">
+                                        <span class="source-line-number">{{ line.line_number }}</span>
+                                        <code>{{ line.text }}</code>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                <p class="source-highlight-note">Highlighted lines are the deterministic source signals used by this Oracle observation.</p>
+                                {% else %}
+                                <pre>{{ test.response }}</pre>
+                                {% endif %}
+                            </details>
+                            {% else %}
+                            <div class="technical-field{% if test.database_error_detected %} oracle-signal-field{% endif %}"><span>Payload / test value</span><pre>{{ test.payload if test.payload else 'Not retained by evidence collector' }}</pre></div>
                             <div class="technical-field"><span>Request</span><pre>{{ test.request }}</pre></div>
                             <details class="raw-response"><summary>View raw response excerpt</summary><pre>{{ test.response }}</pre></details>
+                            {% endif %}
                         </article>
                         {% endfor %}
                         {% if finding.run_id %}<div class="evidence-run-meta"><span>Run ID</span><strong>{{ finding.run_id }}</strong></div>{% endif %}
@@ -553,9 +601,16 @@ Finding Proposed
                 <details class="gate-signals">
                     <summary>View technical gate signals</summary>
                     <div class="gate-signal-grid">
+                        {% if finding.evidence_source == "STATIC" %}
+                        <div><span>Input source observed</span><strong>{{ finding.signals.input_source_observed }}</strong></div>
+                        <div><span>Database sink observed</span><strong>{{ finding.signals.database_sink_observed }}</strong></div>
+                        <div><span>Unsafe query composition</span><strong>{{ finding.signals.unsafe_query_composition_observed }}</strong></div>
+                        <div><span>Parameterized query observed</span><strong>{{ finding.signals.parameterized_query_observed }}</strong></div>
+                        {% else %}
                         <div><span>Database error observed</span><strong>{{ finding.signals.database_error_detected }}</strong></div>
                         <div><span>Behaviour changed</span><strong>{{ finding.signals.behaviour_changed }}</strong></div>
                         <div><span>TRUE/FALSE difference</span><strong>{{ finding.signals.true_false_difference }}</strong></div>
+                        {% endif %}
                     </div>
                 </details>
                 {% else %}
@@ -575,16 +630,25 @@ Finding Proposed
                     </div>
                     <span class="status review-status">{% if finding.human_decision %}{{ finding.human_decision }}{% else %}NOT REVIEWED{% endif %}</span>
                 </div>
-                <div class="reviewer-human-field">
-                    <label for="finalSeverity">Final Severity</label>
-                    <select id="finalSeverity">
-                        <option value="" {% if not finding.final_severity %}selected{% endif %}>Not assigned</option>
-                        <option value="LOW" {% if finding.final_severity == "LOW" %}selected{% endif %}>Low</option>
-                        <option value="MEDIUM" {% if finding.final_severity == "MEDIUM" %}selected{% endif %}>Medium</option>
-                        <option value="HIGH" {% if finding.final_severity == "HIGH" %}selected{% endif %}>High</option>
-                        <option value="CRITICAL" {% if finding.final_severity == "CRITICAL" %}selected{% endif %}>Critical</option>
-                    </select>
-                    <small>This is the reviewer’s final severity. The LLM suggestion remains unchanged in the proposal panel.</small>
+                <div class="review-comparison">
+                    <section class="review-comparison-card llm-comparison-card">
+                        <span class="review-comparison-label">LLM SUGGESTION</span>
+                        <div class="review-comparison-row"><span>Suggested Severity</span><strong>{{ finding.suggested_severity }}</strong></div>
+                        <div class="review-comparison-row"><span>Proposed CWE</span><strong>{{ finding.proposed_cwe }}</strong></div>
+                        <small>Read-only proposal metadata. It is not the reviewer’s final assessment.</small>
+                    </section>
+                    <section class="review-comparison-card human-comparison-card">
+                        <span class="review-comparison-label">HUMAN ASSESSMENT</span>
+                        <label for="finalSeverity">Final Severity</label>
+                        <select id="finalSeverity">
+                            <option value="" {% if not finding.final_severity %}selected{% endif %}>Not assigned</option>
+                            <option value="LOW" {% if finding.final_severity == "LOW" %}selected{% endif %}>Low</option>
+                            <option value="MEDIUM" {% if finding.final_severity == "MEDIUM" %}selected{% endif %}>Medium</option>
+                            <option value="HIGH" {% if finding.final_severity == "HIGH" %}selected{% endif %}>High</option>
+                            <option value="CRITICAL" {% if finding.final_severity == "CRITICAL" %}selected{% endif %}>Critical</option>
+                        </select>
+                        <small>The reviewer assigns final severity independently after considering the proposal and Oracle evidence.</small>
+                    </section>
                 </div>
                 <p class="storage-note">Review data is currently stored in Flask memory and resets when the development server restarts.</p>
             </article>
@@ -974,3 +1038,4 @@ Finding Proposed
 
 
 {% endblock %}
+

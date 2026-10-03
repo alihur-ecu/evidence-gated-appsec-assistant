@@ -2152,3 +2152,201 @@ button:disabled {
     .mode-identity { gap: 14px; }
     .mode-identity .mode-type { font-size: 18px; }
 }
+
+
+/* ==================================================================
+   UI REGRESSION FIXES — provider selector + reviewer comparison
+   ================================================================== */
+
+/* Keep native selects visually consistent with the dark application UI. */
+#llmProvider,
+#finalSeverity {
+    width: 100%;
+    min-height: 46px;
+    padding: 0 42px 0 13px;
+    border: 1px solid #28506f;
+    border-radius: 9px;
+    background-color: #061522;
+    color: #e9f2fa;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.2;
+    cursor: pointer;
+    color-scheme: dark;
+    box-sizing: border-box;
+}
+
+#llmProvider:hover,
+#finalSeverity:hover { border-color: #3a7398; }
+#llmProvider:focus,
+#finalSeverity:focus {
+    border-color: #45a7d1;
+    outline: 2px solid rgba(69, 167, 209, .14);
+    outline-offset: 1px;
+}
+#llmProvider option,
+#finalSeverity option {
+    background: #061522;
+    color: #e9f2fa;
+}
+
+/* LLM suggestion and human judgement are intentionally separate. */
+.review-comparison {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.review-comparison-card {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid #1d4867;
+    border-radius: 10px;
+    background: #061522;
+}
+
+.llm-comparison-card { border-color: #244f6e; }
+.human-comparison-card { border-color: #2a5877; }
+
+.review-comparison-label {
+    display: block;
+    margin-bottom: 13px;
+    color: #69b9df;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .09em;
+}
+
+.review-comparison-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 9px 0;
+    border-bottom: 1px solid rgba(64, 105, 134, .24);
+}
+.review-comparison-row:last-of-type { border-bottom: 0; }
+.review-comparison-row span,
+.human-comparison-card label {
+    color: #86a4bc;
+    font-size: 11px;
+}
+.review-comparison-row strong {
+    color: #eef6fb;
+    font-size: 13px;
+    text-align: right;
+}
+.review-comparison-card small {
+    display: block;
+    margin-top: 12px;
+    color: #6889a3;
+    font-size: 10px;
+    line-height: 1.5;
+}
+.human-comparison-card label {
+    display: block;
+    margin: 0 0 8px;
+}
+
+/* Evidence result labels should be badges, not oversized display text. */
+.evidence-observed {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    max-width: 100%;
+    padding: 5px 8px;
+    border: 1px solid #286a62;
+    border-radius: 999px;
+    background: rgba(25, 102, 88, .13);
+    color: #78d7c5;
+    font-size: 9px !important;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: .045em;
+    overflow-wrap: anywhere;
+}
+.evidence-observed.not-established {
+    border-color: #5f536f;
+    background: rgba(86, 70, 105, .13);
+    color: #a99abb;
+}
+
+/* Technical source evidence remains readable and highlighted without
+   changing the underlying Oracle evidence. */
+.source-highlight-note {
+    margin: 8px 0 0;
+    color: #6f91aa;
+    font-size: 10px;
+    line-height: 1.45;
+}
+.source-evidence-line.is-signal,
+.source-evidence-line.highlight,
+.source-evidence-line[data-highlight="true"] {
+    background: rgba(210, 166, 56, .13);
+    box-shadow: inset 3px 0 0 #b99438;
+}
+
+@media (max-width: 760px) {
+    .review-comparison { grid-template-columns: 1fr; }
+}
+
+
+/* ================================================================
+   REAL ANALYSIS PROGRESS
+   ================================================================ */
+.analysis-progress-panel {
+    margin-top: 22px;
+    padding: 18px 20px;
+    border: 1px solid #214b66;
+    border-radius: 12px;
+    background: rgba(7, 24, 38, 0.88);
+}
+.analysis-progress-panel[hidden] { display: none !important; }
+.analysis-progress-heading,
+.analysis-progress-detail {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+}
+.analysis-progress-heading > div { display: grid; gap: 5px; }
+.analysis-progress-heading strong { color: #e8f4fb; font-size: 14px; }
+.analysis-progress-percent { color: #75d5c9 !important; font-size: 18px !important; }
+.analysis-progress-track {
+    height: 10px;
+    margin: 15px 0 11px;
+    overflow: hidden;
+    border: 1px solid #28536d;
+    border-radius: 999px;
+    background: #081a28;
+}
+.analysis-progress-fill {
+    width: 0%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #168f91, #32c5b4);
+    transition: width 220ms ease;
+}
+.analysis-progress-detail { color: #8faabe; font-size: 11px; }
+#analysisProgressCounter { color: #b8cedd; white-space: nowrap; }
+.evidence-card.oracle-signal {
+    border-color: #2d8f86;
+    box-shadow: inset 0 0 0 1px rgba(45, 143, 134, 0.18);
+}
+.evidence-signal-badge {
+    display: inline-flex;
+    margin-top: 10px;
+    padding: 5px 8px;
+    border: 1px solid #2d8f86;
+    border-radius: 999px;
+    color: #7ad7cc;
+    background: rgba(28, 112, 105, 0.12);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .04em;
+}
+.technical-field.oracle-signal-field pre {
+    border-color: #2d8f86;
+    background: rgba(21, 88, 83, 0.12);
+}

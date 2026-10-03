@@ -551,6 +551,23 @@ Start Analysis | Evidence-Gated AppSec Finding Assistant
             </div>
 
 
+            <section class="analysis-progress-panel" id="analysisProgressPanel" hidden aria-live="polite">
+                <div class="analysis-progress-heading">
+                    <div>
+                        <span class="eyebrow">ANALYSIS PROGRESS</span>
+                        <strong id="analysisProgressStage">Preparing analysis</strong>
+                    </div>
+                    <strong class="analysis-progress-percent" id="analysisProgressPercent">0%</strong>
+                </div>
+                <div class="analysis-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="analysisProgressTrack">
+                    <div class="analysis-progress-fill" id="analysisProgressFill"></div>
+                </div>
+                <div class="analysis-progress-detail">
+                    <span id="analysisProgressMessage">Waiting for the analysis to start...</span>
+                    <span id="analysisProgressCounter"></span>
+                </div>
+            </section>
+
             <div class="config-actions">
 
                 <div class="config-validation">

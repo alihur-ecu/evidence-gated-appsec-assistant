@@ -24,13 +24,15 @@ from __future__ import annotations
 
 from pathlib import Path
 from dataclasses import replace
-from urllib.parse import urljoin, urlsplit
-from tempfile import TemporaryDirectory
+from urllib.parse import urljoin, urlsplit, parse_qs
+from tempfile import TemporaryDirectory, mkdtemp
 import csv
 import json
 import uuid
 import time
 import os
+import shutil
+import threading
 
 
 def _load_local_env() -> None:
@@ -84,8 +86,12 @@ from flask import (
 )
 
 from app.analysis.analysis_service import run_static_analysis
+from app.analysis.providers.static_source_provider import run_static_source_analysis
+from app.analysis.static_pipeline import run_static_proposal_pipeline
+from app.analysis.proposers.factory import create_static_proposer
 from app.dynamic_analysis.pipeline import run_dynamic_analysis
 from app.dynamic_analysis.discovery import DynamicDiscovery
+from app.dynamic_analysis.context_builder import DynamicContextBuilder
 from app.dynamic_analysis.authentication import (
     AUTH_FORM,
     AUTH_NONE,
@@ -104,6 +110,10 @@ from app.models.finding import (
 from app.dynamic_analysis.verification_service import (
     DynamicVerificationService,
     DynamicVerificationError,
+)
+from app.static_verification_service import (
+    StaticVerificationService,
+    StaticVerificationError,
 )
 
 from app.dynamic_analysis.verification_router import (
@@ -270,6 +280,27 @@ def build_evidence_tests(
 
     observations = evidence.get("observations")
 
+    if evidence.get("evidence_source") == "STATIC" and isinstance(observations, list):
+        return [
+            {
+                "test_id": observation.get("observation_id", f"S-{index:03d}"),
+                "name": observation.get("name") or str(observation.get("label", "Source observation")).replace("_", " ").title(),
+                "result": observation.get("result", "OBSERVED"),
+                "payload": "",
+                "request": observation.get("detail", ""),
+                "response": observation.get("source_excerpt", ""),
+                "baseline": observation.get("detail", ""),
+                "observed": observation.get("detail", ""),
+                "result_count": None,
+                "status_code": None,
+                "database_error_detected": False,
+                "observations": [],
+                "source_lines": observation.get("source_lines", []),
+                "source_metadata": observation.get("metadata", {}),
+            }
+            for index, observation in enumerate(observations, start=1)
+        ]
+
     if isinstance(observations, list):
         result = []
 
@@ -281,6 +312,18 @@ def build_evidence_tests(
                 == evidence.get("baseline_observation_id")
             )
 
+            test_value = metadata.get("test_value")
+            if test_value in (None, ""):
+                parameter_name = str(evidence.get("parameter", "") or "").strip()
+                observation_url = str(observation.get("url", "") or "")
+                if parameter_name and observation_url:
+                    query_values = parse_qs(
+                        urlsplit(observation_url).query,
+                        keep_blank_values=True,
+                    ).get(parameter_name, [])
+                    if query_values:
+                        test_value = query_values[0]
+
             result.append({
                 "test_id": f"T-{index:03d}",
                 "name": (
@@ -289,7 +332,10 @@ def build_evidence_tests(
                     else label.replace("_", " " ).title()
                 ),
                 "result": "OBSERVED",
-                "payload": metadata.get("test_value", ""),
+                "payload": "" if test_value is None else str(test_value),
+                "error_family": metadata.get("error_family"),
+                "error_signature": metadata.get("error_signature"),
+                "is_baseline": is_baseline,
                 "request": (
                     f"{observation.get('method', '')} "
                     f"{observation.get('url', '')}"
@@ -378,15 +424,21 @@ def build_evidence_summary(
     verification = evidence.get("verification", {})
     reasons = verification.get("reasons", [])
 
+    evidence_kind = (
+        "source-code"
+        if evidence.get("evidence_source") == "STATIC"
+        else "runtime"
+    )
+
     if reasons:
         return (
-            "Deterministic runtime verification completed. "
+            f"Deterministic {evidence_kind} verification completed. "
             f"Result: {gate_result}. "
             + " ".join(str(reason) for reason in reasons)
         )
 
     return (
-        "Deterministic runtime verification completed. "
+        f"Deterministic {evidence_kind} verification completed. "
         f"Result: {gate_result}."
     )
 
@@ -486,6 +538,9 @@ def build_view_model(
         "finding_id":
             finding.finding_id,
 
+        "scan_type":
+            finding.scan_type.value,
+
         "finding_type":
             FINDING_TYPE_LABELS.get(
                 finding.finding_type,
@@ -546,7 +601,7 @@ def build_view_model(
 
         "evidence_source":
             (
-                "RUNTIME"
+                evidence.get("evidence_source", "RUNTIME")
                 if evidence
                 else None
             ),
@@ -609,6 +664,26 @@ def build_view_model(
         # does not decide support from a vulnerability-specific if/elif chain.
         "verification_supported":
             verification_route.can_verify,
+
+        "runtime_verification_supported":
+            (
+                verification_route.can_verify
+                and verification_route.mode is not None
+                and verification_route.mode.value == "RUNTIME"
+            ),
+
+        "static_verification_supported":
+            (
+                verification_route.can_verify
+                and verification_route.mode is not None
+                and verification_route.mode.value == "STATIC"
+            ),
+
+        "static_verification_pending":
+            (
+                finding.scan_type.value == "STATIC"
+                and not verification_route.can_verify
+            ),
 
         "verification_readiness":
             verification_route.readiness.value,
@@ -757,6 +832,349 @@ def home():
     )
 
 
+
+
+# ======================================================================
+# ASYNCHRONOUS ANALYSIS JOBS / REAL PROGRESS
+# ======================================================================
+
+ANALYSIS_JOBS: dict[str, dict] = {}
+ANALYSIS_JOB_RUNTIME: dict[str, dict] = {}
+ANALYSIS_JOBS_LOCK = threading.Lock()
+
+
+def _job_update(job_id: str, **changes) -> None:
+    with ANALYSIS_JOBS_LOCK:
+        job = ANALYSIS_JOBS.get(job_id)
+        if job is not None:
+            job.update(changes)
+
+
+def _job_snapshot(job_id: str) -> dict | None:
+    with ANALYSIS_JOBS_LOCK:
+        job = ANALYSIS_JOBS.get(job_id)
+        if job is None:
+            return None
+        snapshot = dict(job)
+        runtime = ANALYSIS_JOB_RUNTIME.get(job_id, {})
+        tracker = runtime.get("tracker")
+
+    if tracker is not None:
+        live = tracker.live_progress()
+        if live:
+            snapshot.update(live)
+    return snapshot
+
+
+class _ProgressTrackingProposer:
+    """Transparent proposer wrapper exposing real item-by-item LLM progress."""
+
+    def __init__(self, proposer, job_id: str):
+        self._proposer = proposer
+        self._job_id = job_id
+        self.provider_name = getattr(proposer, "provider_name", proposer.__class__.__name__)
+        self.total_items = 0
+        self.item_label = "item"
+        self.active = False
+
+    def __getattr__(self, name):
+        return getattr(self._proposer, name)
+
+    @property
+    def last_execution_report(self):
+        return getattr(self._proposer, "last_execution_report", None)
+
+    def _begin(self, total: int, label: str) -> None:
+        self.total_items = max(int(total), 0)
+        self.item_label = label
+        self.active = True
+        _job_update(
+            self._job_id,
+            stage="LLM_PROPOSAL",
+            stage_label="LLM proposal analysis",
+            message=(
+                f"LLM proposal analysis started — {self.total_items} "
+                f"{label}{'' if self.total_items == 1 else 's'} selected."
+            ),
+            llm_total=self.total_items,
+            llm_completed=0,
+            progress=40,
+        )
+
+    def _finish(self) -> None:
+        report = self.last_execution_report or {}
+        completed = int(report.get("chunks_succeeded", 0) or 0) + int(report.get("chunks_failed", 0) or 0)
+        self.active = False
+        _job_update(
+            self._job_id,
+            llm_completed=min(completed, self.total_items),
+            progress=100,
+            message="LLM proposal analysis complete.",
+        )
+
+    def live_progress(self) -> dict:
+        if not self.active or self.total_items <= 0:
+            return {}
+        report = self.last_execution_report or {}
+        attempted = int(report.get("chunks_attempted", 0) or 0)
+        completed = int(report.get("chunks_succeeded", 0) or 0) + int(report.get("chunks_failed", 0) or 0)
+        completed = min(completed, self.total_items)
+        current = min(max(attempted, completed), self.total_items)
+        fraction = completed / self.total_items
+        return {
+            "stage": "LLM_PROPOSAL",
+            "stage_label": "LLM proposal analysis",
+            "progress": min(99, 40 + round(59 * fraction)),
+            "llm_completed": completed,
+            "llm_total": self.total_items,
+            "llm_current": current,
+            "message": (
+                f"LLM proposal analysis — {completed} of {self.total_items} {self.item_label}s completed"
+                + (f"; processing {self.item_label} {current}." if current > completed else ".")
+            ),
+        }
+
+    def propose(self, *, application_name, chunks):
+        self._begin(len(chunks), "chunk")
+        try:
+            return self._proposer.propose(application_name=application_name, chunks=chunks)
+        finally:
+            self._finish()
+
+    def propose_contexts(self, *, application_name, contexts):
+        valid = [item for item in contexts if getattr(item, "content", "") and str(item.content).strip()]
+        self._begin(len(valid), "context")
+        try:
+            return self._proposer.propose_contexts(application_name=application_name, contexts=contexts)
+        finally:
+            self._finish()
+
+
+def _run_static_job(job_id: str, source_path: str, original_filename: str, application_name: str, llm_provider: str, llm_api_key: str | None, temp_dir: str) -> None:
+    try:
+        _job_update(job_id, status="RUNNING", stage="SOURCE_PREPARATION", stage_label="Source preparation", progress=10, message="Preparing bounded source context...")
+        provider_name = os.getenv("ANALYSIS_PROVIDER", "mock").strip().lower()
+
+        if provider_name == "static_source":
+            prepared = run_static_source_analysis(
+                source_path=source_path,
+                original_filename=original_filename,
+                application_name=application_name,
+            )
+            _job_update(job_id, stage="CONTEXT_PREPARATION", stage_label="Context collection", progress=35, message="Source context collected. Applying the LLM execution budget...")
+            proposer = create_static_proposer(provider_name=llm_provider, api_key=llm_api_key)
+            tracker = _ProgressTrackingProposer(proposer, job_id)
+            with ANALYSIS_JOBS_LOCK:
+                ANALYSIS_JOB_RUNTIME[job_id] = {"tracker": tracker}
+            analysis_result = run_static_proposal_pipeline(prepared_analysis=prepared, proposer=tracker)
+            analysis_result["analysis_id"] = f"A-{uuid.uuid4().hex[:8].upper()}"
+        else:
+            # Preserve the existing mock/alternate analysis path unchanged.
+            _job_update(job_id, progress=35, message="Prepared analysis is being processed...")
+            analysis_result = run_static_analysis(
+                source_path=source_path,
+                original_filename=original_filename,
+                application_name=application_name,
+                llm_provider=llm_provider,
+                llm_api_key=llm_api_key,
+            )
+
+        proposal_status = str(analysis_result.get("proposal_status", "SUCCESS")).upper()
+        if proposal_status == "FAILED":
+            raise RuntimeError("The selected LLM proposal stage could not complete.")
+
+        findings = register_analysis_result(analysis_result)
+        _job_update(
+            job_id,
+            status="COMPLETED",
+            stage="COMPLETED",
+            stage_label="Analysis complete",
+            progress=100,
+            finding_count=len(findings),
+            provider=analysis_result.get("proposal_provider") or analysis_result.get("provider") or llm_provider.upper(),
+            redirect_url=f"/analysis/{analysis_result['analysis_id']}/results",
+            message=f"Analysis complete — {len(findings)} proposed finding(s).",
+        )
+    except Exception as error:
+        app.logger.exception("Static analysis job failed")
+        _job_update(job_id, status="FAILED", stage="FAILED", stage_label="Analysis failed", error=str(error), message=str(error))
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+class _ProgressDiscovery:
+    def __init__(self, discovery, job_id: str):
+        self._discovery = discovery
+        self._job_id = job_id
+
+    def __getattr__(self, name):
+        return getattr(self._discovery, name)
+
+    def discover(self, target):
+        result = self._discovery.discover(target)
+        _job_update(
+            self._job_id,
+            stage="CONTEXT_PREPARATION",
+            stage_label="Context preparation",
+            progress=32,
+            message=(
+                f"Runtime discovery complete — {len(result.pages)} page(s), "
+                f"{len(result.endpoints)} endpoint(s), {len(result.forms)} form(s). "
+                "Building bounded analysis context..."
+            ),
+        )
+        return result
+
+
+class _ProgressContextBuilder:
+    def __init__(self, builder, job_id: str):
+        self._builder = builder
+        self._job_id = job_id
+
+    def __getattr__(self, name):
+        return getattr(self._builder, name)
+
+    def build(self, discovery_result):
+        result = self._builder.build(discovery_result)
+        _job_update(
+            self._job_id,
+            stage="CONTEXT_PREPARATION",
+            stage_label="Context preparation",
+            progress=39,
+            message=(
+                f"Context preparation complete — {result.contexts_selected} "
+                f"of {result.contexts_created} context(s) selected for LLM analysis."
+            ),
+        )
+        return result
+
+
+def _run_dynamic_job(job_id: str, *, target_url: str, application_name: str, analysis_scope: str, authentication_mode: str, username: str, password: str, llm_provider: str | None, llm_api_key: str | None) -> None:
+    try:
+        _job_update(job_id, status="RUNNING", stage="TARGET_VALIDATION", stage_label="Target validation", progress=5, message="Target received and validated.")
+        _job_update(job_id, stage="AUTHENTICATION", stage_label="Authentication" if authentication_mode == AUTH_FORM else "Session preparation", progress=12, message="Preparing the authorised analysis session...")
+        analysis_session, auth_result = create_analysis_session(
+            target_url=target_url,
+            authentication_mode=authentication_mode,
+            username=username if authentication_mode == AUTH_FORM else None,
+            password=password if authentication_mode == AUTH_FORM else None,
+        )
+        _job_update(job_id, stage="DISCOVERY", stage_label="Runtime discovery", progress=20, message="Discovering the authorised runtime surface...")
+        discovery = _ProgressDiscovery(DynamicDiscovery(session=analysis_session), job_id)
+        context_builder = _ProgressContextBuilder(DynamicContextBuilder(), job_id)
+        proposer = create_static_proposer(provider_name=llm_provider, api_key=llm_api_key)
+        tracker = _ProgressTrackingProposer(proposer, job_id)
+        with ANALYSIS_JOBS_LOCK:
+            ANALYSIS_JOB_RUNTIME[job_id] = {"tracker": tracker}
+
+        dynamic_result = run_dynamic_analysis(
+            target_url=target_url,
+            application_name=application_name,
+            discovery=discovery,
+            context_builder=context_builder,
+            proposer=tracker,
+        )
+        proposal_status = str(dynamic_result.get("proposal_status", "SUCCESS")).upper()
+        if proposal_status == "FAILED":
+            raise RuntimeError("Runtime discovery completed, but the LLM proposal stage could not complete.")
+
+        analysis_result = prepare_dynamic_analysis_result(dynamic_result, application_name=application_name, analysis_scope=analysis_scope)
+        analysis_result["authentication"] = auth_result.to_dict()
+        analysis_result["authentication_mode"] = auth_result.mode
+        findings = register_analysis_result(analysis_result)
+        analysis_id = analysis_result["analysis_id"]
+        ANALYSIS_SESSIONS.clear()
+        ANALYSIS_SESSIONS[analysis_id] = analysis_session
+        discovery_result = dynamic_result.get("discovery", {})
+        _job_update(
+            job_id,
+            status="COMPLETED",
+            stage="COMPLETED",
+            stage_label="Analysis complete",
+            progress=100,
+            finding_count=len(findings),
+            provider=dynamic_result.get("proposal_provider", "UNKNOWN"),
+            redirect_url=f"/analysis/{analysis_id}/results",
+            discovery_summary={
+                "pages": len(discovery_result.get("pages", [])),
+                "endpoints": len(discovery_result.get("endpoints", [])),
+                "forms": len(discovery_result.get("forms", [])),
+                "errors": len(discovery_result.get("errors", [])),
+            },
+            message=f"Analysis complete — {len(findings)} proposed finding(s).",
+        )
+    except Exception as error:
+        app.logger.exception("Dynamic analysis job failed")
+        _job_update(job_id, status="FAILED", stage="FAILED", stage_label="Analysis failed", error=str(error), message=str(error))
+
+
+@app.route("/analysis/jobs/<job_id>", methods=["GET"])
+def analysis_job_status(job_id):
+    snapshot = _job_snapshot(job_id)
+    if snapshot is None:
+        return jsonify({"ok": False, "error": "Analysis job was not found."}), 404
+    return jsonify({"ok": True, **snapshot})
+
+
+@app.route("/analysis/static/job", methods=["POST"])
+def start_static_analysis_job():
+    source_file = request.files.get("source_file")
+    application_name = request.form.get("application_name", "").strip()
+    authorised = request.form.get("authorised") == "true"
+    llm_provider = request.form.get("llm_provider", "").strip().lower()
+    llm_api_key = request.form.get("llm_api_key", "").strip() or None
+    if not llm_provider or llm_provider not in {"openai", "gemini", "lmstudio"}:
+        return jsonify({"ok": False, "error": "Choose a supported LLM provider: OpenAI, Gemini, or LM Studio."}), 400
+    if source_file is None or not source_file.filename:
+        return jsonify({"ok": False, "error": "A source file is required."}), 400
+    if not application_name:
+        return jsonify({"ok": False, "error": "Application name is required."}), 400
+    if not authorised:
+        return jsonify({"ok": False, "error": "Authorisation confirmation is required."}), 400
+
+    original_filename = Path(source_file.filename).name
+    temp_path = mkdtemp(prefix="eg_appsec_job_")
+    source_path = Path(temp_path) / original_filename
+    source_file.save(source_path)
+    job_id = f"J-{uuid.uuid4().hex[:10].upper()}"
+    _job_update(job_id)  # no-op until inserted
+    with ANALYSIS_JOBS_LOCK:
+        ANALYSIS_JOBS[job_id] = {"job_id": job_id, "status": "QUEUED", "stage": "UPLOAD_RECEIVED", "stage_label": "Upload received", "progress": 5, "message": "Upload received. Starting analysis...", "analysis_type": "STATIC"}
+    threading.Thread(target=_run_static_job, kwargs=dict(job_id=job_id, source_path=str(source_path), original_filename=original_filename, application_name=application_name, llm_provider=llm_provider, llm_api_key=llm_api_key, temp_dir=temp_path), daemon=True).start()
+    return jsonify({"ok": True, "job_id": job_id}), 202
+
+
+@app.route("/analysis/dynamic/job", methods=["POST"])
+def start_dynamic_analysis_job():
+    data = request.get_json(silent=True) or request.form
+    target_url = str(data.get("target_url", "")).strip()
+    application_name = str(data.get("application_name", "")).strip() or target_url
+    analysis_scope = str(data.get("analysis_scope", "")).strip()
+    llm_provider = str(data.get("llm_provider", "")).strip().lower() or None
+    llm_api_key = str(data.get("llm_api_key", "")).strip() or None
+    authorised = data.get("authorised") is True or str(data.get("authorised")).lower() == "true"
+    try:
+        authentication_mode = normalise_authentication_mode(data.get("authentication_mode", AUTH_NONE))
+    except DynamicAuthenticationError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+    username = str(data.get("username", "")).strip()
+    password = str(data.get("password", ""))
+    if not target_url:
+        return jsonify({"ok": False, "error": "Target URL is required."}), 400
+    if not analysis_scope:
+        return jsonify({"ok": False, "error": "Analysis scope is required."}), 400
+    if not authorised:
+        return jsonify({"ok": False, "error": "Authorisation confirmation is required."}), 400
+    if llm_provider not in {"openai", "gemini", "lmstudio"}:
+        return jsonify({"ok": False, "error": "Choose a supported LLM provider: OpenAI, Gemini, or LM Studio."}), 400
+    if authentication_mode == AUTH_FORM and (not username or not password):
+        return jsonify({"ok": False, "error": "Username and password are required for authenticated analysis."}), 400
+
+    job_id = f"J-{uuid.uuid4().hex[:10].upper()}"
+    with ANALYSIS_JOBS_LOCK:
+        ANALYSIS_JOBS[job_id] = {"job_id": job_id, "status": "QUEUED", "stage": "TARGET_RECEIVED", "stage_label": "Target received", "progress": 3, "message": "Target received. Starting analysis...", "analysis_type": "DYNAMIC"}
+    threading.Thread(target=_run_dynamic_job, kwargs=dict(job_id=job_id, target_url=target_url, application_name=application_name, analysis_scope=analysis_scope, authentication_mode=authentication_mode, username=username, password=password, llm_provider=llm_provider, llm_api_key=llm_api_key), daemon=True).start()
+    return jsonify({"ok": True, "job_id": job_id}), 202
 
 
 # ======================================================================
@@ -1266,42 +1684,74 @@ def verify_finding(
         analysis_id = metadata.get("analysis_id")
         analysis_session = ANALYSIS_SESSIONS.get(analysis_id)
 
-        # Static analysis can legitimately propose a relative route such as
-        # /product. Runtime verification, however, must operate against an
-        # authorised running application. The browser may therefore provide
-        # a runtime base URL for this verification request. We build a
-        # temporary verification finding and leave the LLM proposal unchanged.
-        request_data = request.get_json(silent=True) or {}
-        runtime_target_url = str(
-            request_data.get("target_url", "")
-        ).strip()
+        # Static and dynamic findings use separate evidence domains.
+        if finding.scan_type.value == "STATIC":
+            if verification_route.verifier_id != "static_sql_injection_source":
+                return jsonify({
+                    "ok": False,
+                    "code": "STATIC_VERIFICATION_EXECUTOR_UNAVAILABLE",
+                    "error": "No Static Oracle executor is registered for this finding.",
+                }), 501
+
+            analysis_result = ANALYSES.get(analysis_id)
+            if not isinstance(analysis_result, dict):
+                return jsonify({
+                    "ok": False,
+                    "code": "STATIC_ANALYSIS_CONTEXT_MISSING",
+                    "error": "The retained static analysis context is unavailable. Run the static analysis again.",
+                }), 409
+
+            static_result = StaticVerificationService().verify(
+                finding,
+                analysis_result=analysis_result,
+                metadata=metadata,
+            )
+            finding.status = static_result.finding_status
+            evidence = static_result.evidence
+            EVIDENCE_BY_FINDING[finding_id] = evidence
+
+            artifacts_dir = Path("artifacts") / "runs"
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+            json_file = artifacts_dir / f"{evidence['run_id']}_static_evidence.json"
+            with json_file.open("w", encoding="utf-8") as file:
+                json.dump(evidence, file, indent=2)
+
+            return jsonify({
+                "ok": True,
+                "finding_id": finding_id,
+                "verification_status": "COMPLETED",
+                "evidence_gate_result": static_result.finding_status.value,
+                "run_id": evidence["run_id"],
+                "json_artifact": str(json_file),
+            })
 
         verification_finding = finding
         endpoint = (finding.endpoint or "").strip()
         endpoint_parts = urlsplit(endpoint)
 
-        if not endpoint_parts.scheme or not endpoint_parts.netloc:
-            if not runtime_target_url:
-                return jsonify({
-                    "ok": False,
-                    "code": "RUNTIME_TARGET_REQUIRED",
-                    "error": (
-                        "This finding came from source analysis and its endpoint "
-                        "is relative. Enter the authorised running application "
-                        "URL before collecting independent runtime evidence."
-                    ),
-                }), 409
+        # The dynamic target was already authorised and supplied when the scan
+        # started. Reuse that analysis context instead of asking the reviewer
+        # to enter the same URL again.
+        analysis = ANALYSES.get(analysis_id, {})
+        runtime_target_url = str(
+            analysis.get("target")
+            or analysis.get("target_details", {}).get("base_url")
+            or analysis.get("target_details", {}).get("original_url")
+            or ""
+        ).strip()
 
+        if not endpoint_parts.scheme or not endpoint_parts.netloc:
             target_parts = urlsplit(runtime_target_url)
             if target_parts.scheme not in {"http", "https"} or not target_parts.netloc:
                 return jsonify({
                     "ok": False,
-                    "code": "INVALID_RUNTIME_TARGET",
+                    "code": "DYNAMIC_TARGET_CONTEXT_MISSING",
                     "error": (
-                        "Runtime target must be a complete http:// or https:// URL "
-                        "with a hostname."
+                        "The authorised dynamic target could not be recovered "
+                        "from this analysis session. Run the dynamic analysis "
+                        "again before collecting runtime evidence."
                     ),
-                }), 400
+                }), 409
 
             absolute_endpoint = urljoin(
                 runtime_target_url.rstrip("/") + "/",
@@ -1355,6 +1805,12 @@ def verify_finding(
             "json_artifact": str(json_file),
             "csv_artifact": str(csv_file),
         })
+
+    except StaticVerificationError as error:
+        return jsonify({
+            "ok": False,
+            "error": str(error),
+        }), 400
 
     except DynamicVerificationError as error:
         return jsonify({
@@ -1471,3 +1927,4 @@ if __name__ == "__main__":
     app.run(
         debug=True
     )
+

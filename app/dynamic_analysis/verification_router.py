@@ -163,8 +163,20 @@ INJECTION_DIFFERENTIAL = VerificationCapability(
 )
 
 
+STATIC_SQL_INJECTION_SOURCE = VerificationCapability(
+    capability_id="STATIC_SQL_INJECTION_SOURCE",
+    verifier_id="static_sql_injection_source",
+    mode=VerificationMode.STATIC,
+    finding_types=frozenset({
+        FindingType.SQL_INJECTION,
+    }),
+    required_fields=(),
+)
+
+
 DEFAULT_VERIFICATION_CAPABILITIES = (
     INJECTION_DIFFERENTIAL,
+    STATIC_SQL_INJECTION_SOURCE,
 )
 
 
@@ -269,6 +281,12 @@ class VerificationRouter:
         # Capability discovery
         # --------------------------------------------------------------
 
+        expected_mode = (
+            VerificationMode.STATIC
+            if finding.scan_type.value == "STATIC"
+            else VerificationMode.RUNTIME
+        )
+
         matches = tuple(
             capability
             for capability
@@ -276,6 +294,7 @@ class VerificationRouter:
             if (
                 finding.finding_type
                 in capability.finding_types
+                and capability.mode is expected_mode
             )
         )
 
