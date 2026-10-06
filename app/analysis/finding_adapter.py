@@ -354,6 +354,32 @@ def adapt_analysis_result(
             "line_number":
                 finding.line_number,
 
+            # Preserve provider provenance separately from runtime location.
+            # Static findings are allowed to have no HTTP endpoint/parameter,
+            # but the bounded source context that produced the proposal must
+            # remain traceable for Oracle verification and reporting.
+            "chunk_id":
+                _clean_optional_string(proposal.get("chunk_id")),
+
+            "observed_in_chunks":
+                [
+                    str(value).strip()
+                    for value in (proposal.get("observed_in_chunks") or [])
+                    if str(value).strip()
+                ]
+                if isinstance(proposal.get("observed_in_chunks"), (list, tuple, set))
+                else (
+                    [_clean_optional_string(proposal.get("observed_in_chunks"))]
+                    if _clean_optional_string(proposal.get("observed_in_chunks"))
+                    else []
+                ),
+
+            "chunk_start_line":
+                _normalise_line_number(proposal.get("chunk_start_line")),
+
+            "chunk_end_line":
+                _normalise_line_number(proposal.get("chunk_end_line")),
+
             "scan_type":
                 finding.scan_type.value,
 

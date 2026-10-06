@@ -12,6 +12,10 @@
 {{ analysis.provider }} Analysis
 {% endblock %}
 
+{% block topbar_actions %}
+<a class="topbar-action-button" href="{{ url_for('home') }}">+ New Analysis</a>
+{% endblock %}
+
 {% block content %}
 <div class="page-layout analysis-results-page">
     <section class="main-column">
@@ -52,6 +56,16 @@
                 </span>
             </div>
         </section>
+
+        <div class="analysis-page-actions">
+            <a
+                class="action-link-button"
+                href="{{ url_for('analysis_report', analysis_id=analysis.analysis_id) }}"
+            >
+                View Analysis Report
+            </a>
+
+        </div>
 
 
         <section class="analysis-run-summary">

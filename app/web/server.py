@@ -33,6 +33,7 @@ import time
 import os
 import shutil
 import threading
+from datetime import datetime, timezone
 
 
 def _load_local_env() -> None:
@@ -284,6 +285,7 @@ def build_evidence_tests(
         return [
             {
                 "test_id": observation.get("observation_id", f"S-{index:03d}"),
+                "display_id": f"Evidence {index:02d}",
                 "name": observation.get("name") or str(observation.get("label", "Source observation")).replace("_", " ").title(),
                 "result": observation.get("result", "OBSERVED"),
                 "payload": "",
@@ -326,6 +328,7 @@ def build_evidence_tests(
 
             result.append({
                 "test_id": f"T-{index:03d}",
+                "display_id": f"Evidence {index:02d}",
                 "name": (
                     "Baseline request"
                     if is_baseline
@@ -383,6 +386,7 @@ def build_evidence_tests(
         response = test.get("response", {})
         result.append({
             "test_id": test_id,
+            "display_id": f"Evidence {len(result) + 1:02d}",
             "name": name,
             "result": "OBSERVED",
             "payload": test.get("payload", ""),
@@ -538,6 +542,9 @@ def build_view_model(
         "finding_id":
             finding.finding_id,
 
+        "analysis_id":
+            metadata.get("analysis_id"),
+
         "scan_type":
             finding.scan_type.value,
 
@@ -558,6 +565,21 @@ def build_view_model(
                 "source_file",
                 "Not available",
             ),
+
+        "line_number":
+            metadata.get("line_number") or finding.line_number,
+
+        "chunk_id":
+            metadata.get("chunk_id"),
+
+        "observed_in_chunks":
+            metadata.get("observed_in_chunks", []),
+
+        "chunk_start_line":
+            metadata.get("chunk_start_line"),
+
+        "chunk_end_line":
+            metadata.get("chunk_end_line"),
 
         "endpoint":
             finding.endpoint,
@@ -1919,6 +1941,213 @@ def update_review(
 
 
 # ======================================================================
+# ANALYSIS REPORTS / SAVED ANALYSES
+# ======================================================================
+
+SAVED_ANALYSES_DIR = Path("artifacts") / "saved_analyses"
+
+
+def _report_findings_for_analysis(analysis_id: str) -> list[dict]:
+    """Return the current in-memory findings that belong to one analysis."""
+    return [
+        build_view_model(finding)
+        for finding in FINDINGS.values()
+        if FINDING_METADATA.get(finding.finding_id, {}).get("analysis_id") == analysis_id
+    ]
+
+
+def _report_summary(findings: list[dict]) -> dict:
+    decisions = {"ACCEPTED": 0, "REJECTED": 0, "NEEDS_FURTHER_REVIEW": 0, "PENDING": 0}
+    gates = {"PROVED": 0, "REFUTED": 0, "NEEDS_HUMAN": 0, "PENDING": 0}
+    severities = {"LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0, "UNSET": 0}
+
+    for finding in findings:
+        decision = finding.get("human_decision") or "PENDING"
+        decisions[decision] = decisions.get(decision, 0) + 1
+
+        gate = finding.get("evidence_gate_result") or "PENDING"
+        gates[gate] = gates.get(gate, 0) + 1
+
+        severity = finding.get("final_severity") or finding.get("suggested_severity") or "UNSET"
+        severity = str(severity).upper()
+        severities[severity] = severities.get(severity, 0) + 1
+
+    return {
+        "total_findings": len(findings),
+        "decisions": decisions,
+        "verification": gates,
+        "severities": severities,
+    }
+
+
+def _build_analysis_report(analysis_id: str) -> dict:
+    analysis = ANALYSES.get(analysis_id)
+    if analysis is None:
+        abort(404)
+
+    findings = _report_findings_for_analysis(analysis_id)
+    return {
+        "schema_version": 1,
+        "analysis_id": analysis_id,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "analysis": analysis,
+        "summary": _report_summary(findings),
+        "findings": findings,
+    }
+
+
+def _saved_analysis_path(analysis_id: str) -> Path:
+    safe_id = "".join(ch for ch in analysis_id if ch.isalnum() or ch in {"-", "_"})
+    if not safe_id or safe_id != analysis_id:
+        abort(400)
+    return SAVED_ANALYSES_DIR / f"{safe_id}.json"
+
+
+def _load_saved_analysis(analysis_id: str) -> dict | None:
+    path = _saved_analysis_path(analysis_id)
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _saved_analysis_cards() -> list[dict]:
+    if not SAVED_ANALYSES_DIR.is_dir():
+        return []
+
+    cards = []
+    for path in SAVED_ANALYSES_DIR.glob("*.json"):
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        analysis = report.get("analysis", {})
+        summary = report.get("summary", {})
+        cards.append({
+            "analysis_id": report.get("analysis_id", path.stem),
+            "saved_at_utc": report.get("saved_at_utc") or report.get("generated_at_utc"),
+            "analysis_type": analysis.get("analysis_type") or analysis.get("scan_type") or "UNKNOWN",
+            "provider": analysis.get("proposal_provider") or analysis.get("provider") or "UNKNOWN",
+            "target": analysis.get("target") or analysis.get("application_name") or analysis.get("source_file") or "Not available",
+            "authentication_mode": analysis.get("authentication_mode") or "—",
+            "finding_count": summary.get("total_findings", len(report.get("findings", []))),
+        })
+
+    cards.sort(key=lambda item: item.get("saved_at_utc") or "", reverse=True)
+    return cards
+
+
+def _report_csv_text(report: dict) -> str:
+    from io import StringIO
+
+    output = StringIO()
+    fields = [
+        "analysis_id", "finding_id", "finding_type", "source_file", "line_number",
+        "chunk_start_line", "chunk_end_line", "endpoint", "parameter", "method",
+        "proposed_cwe", "llm_status", "suggested_severity", "verification_status",
+        "evidence_gate_result", "final_severity", "human_decision", "reviewer_comment",
+        "run_id", "evidence_source", "evidence_summary",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
+
+    for finding in report.get("findings", []):
+        writer.writerow({field: finding.get(field) for field in fields})
+
+    return output.getvalue()
+
+
+@app.route("/analysis/<analysis_id>/report")
+def analysis_report(analysis_id):
+    # A saved snapshot remains viewable even after a later scan replaces the
+    # active in-memory finding set. The active analysis is otherwise rendered live.
+    saved = _load_saved_analysis(analysis_id)
+    if saved is not None and analysis_id not in ANALYSES:
+        report = saved
+        is_saved = True
+    else:
+        report = _build_analysis_report(analysis_id)
+        is_saved = _saved_analysis_path(analysis_id).is_file()
+
+    return render_template(
+        "analysis_report.html",
+        report=report,
+        is_saved=is_saved,
+        active_page="reports",
+    )
+
+
+@app.route("/analysis/<analysis_id>/save", methods=["POST"])
+def save_analysis(analysis_id):
+    report = _build_analysis_report(analysis_id)
+    report["saved_at_utc"] = datetime.now(timezone.utc).isoformat()
+
+    SAVED_ANALYSES_DIR.mkdir(parents=True, exist_ok=True)
+    path = _saved_analysis_path(analysis_id)
+    path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+
+    return jsonify({
+        "ok": True,
+        "analysis_id": analysis_id,
+        "saved": True,
+        "report_url": url_for("analysis_report", analysis_id=analysis_id),
+    })
+
+
+@app.route("/reports")
+def reports_list():
+    return render_template(
+        "reports.html",
+        saved_analyses=_saved_analysis_cards(),
+        active_page="reports",
+    )
+
+
+@app.route("/reports/<analysis_id>")
+def saved_report(analysis_id):
+    report = _load_saved_analysis(analysis_id)
+    if report is None:
+        abort(404)
+    return render_template(
+        "analysis_report.html",
+        report=report,
+        is_saved=True,
+        active_page="reports",
+    )
+
+
+@app.route("/reports/<analysis_id>/export/<format_name>")
+def export_report(analysis_id, format_name):
+    report = _load_saved_analysis(analysis_id)
+    if report is None:
+        # Allow preview/export of the active analysis before explicitly saving it.
+        report = _build_analysis_report(analysis_id)
+
+    format_name = format_name.lower()
+    if format_name == "json":
+        body = json.dumps(report, indent=2, default=str)
+        mimetype = "application/json"
+        extension = "json"
+    elif format_name == "csv":
+        body = _report_csv_text(report)
+        mimetype = "text/csv"
+        extension = "csv"
+    else:
+        abort(404)
+
+    return app.response_class(
+        body,
+        mimetype=mimetype,
+        headers={
+            "Content-Disposition": f'attachment; filename="{analysis_id}_report.{extension}"'
+        },
+    )
+
+
+# ======================================================================
 # DEVELOPMENT SERVER
 # ======================================================================
 
@@ -1927,4 +2156,3 @@ if __name__ == "__main__":
     app.run(
         debug=True
     )
-

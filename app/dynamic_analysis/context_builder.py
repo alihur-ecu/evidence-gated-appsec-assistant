@@ -556,6 +556,7 @@ def _page_observation(
         "response_header_names": page.response_header_names,
         "cookie_names": page.cookie_names,
         "redirect_count": page.redirect_count,
+        "response_excerpt": page.response_excerpt,
     }
 
 def _render_context_text(
@@ -614,6 +615,17 @@ def _render_context_text(
             if input_type:
                 description += (
                     f", type={input_type}"
+                )
+
+            observed_value = parameter.get(
+                "observed_value"
+            )
+            if observed_value is not None:
+                value_text = str(observed_value)
+                if len(value_text) > 120:
+                    value_text = value_text[:120] + "…"
+                description += (
+                    f", observed_value={value_text!r}"
                 )
 
             description += "]"
@@ -678,6 +690,16 @@ def _render_context_text(
                 else "none observed"
             )
         )
+
+        response_excerpt = http_observation.get(
+            "response_excerpt"
+        )
+        if response_excerpt:
+            lines.extend([
+                "",
+                "Bounded response excerpt (observed, not verified):",
+                str(response_excerpt),
+            ])
     else:
         lines.append(
             "- no fetched response associated with this context"
@@ -698,3 +720,4 @@ def _render_context_text(
     return "\n".join(
         lines
     )
+

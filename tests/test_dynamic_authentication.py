@@ -31,6 +31,13 @@ class FakeSession:
 
     def get(self, url, **kwargs):
         self.get_calls.append((url, kwargs))
+
+        if len(self.get_calls) > 1:
+            return FakeResponse(
+                url="https://example.test",
+                text="<html><body>Authenticated target</body></html>",
+            )
+
         return FakeResponse(
             url="https://example.test/login",
             text=(
@@ -82,6 +89,8 @@ def test_form_authentication_preserves_hidden_and_submit_fields(monkeypatch):
     assert result.mode == AUTH_FORM
     assert result.authenticated is True
     assert result.login_url == "https://example.test/session"
+    assert result.final_url == "https://example.test"
+    assert len(fake.get_calls) == 2
 
     url, kwargs = fake.post_calls[0]
     assert url == "https://example.test/session"

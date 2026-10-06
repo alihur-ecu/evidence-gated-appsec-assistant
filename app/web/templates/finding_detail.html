@@ -34,6 +34,9 @@ Finding Proposed
 
 {% endblock %}
 
+{% block topbar_actions %}
+<a class="topbar-action-button" href="{{ url_for('home') }}">+ New Analysis</a>
+{% endblock %}
 
 {% block content %}
 
@@ -383,6 +386,18 @@ Finding Proposed
                     </div>
                     <button id="runVerificationButton" class="verification-action">Collect Static Oracle Evidence</button>
                     <p id="verificationMessage" class="verification-message"></p>
+                    {% elif finding.verification_readiness == "CONTEXT_REQUIRED" %}
+                    <div class="verification-ready-icon muted-icon">!</div>
+                    <div>
+                        <span class="eyebrow">ORACLE CONTEXT REQUIRED</span>
+                        <h4>Additional observed context is required before verification</h4>
+                        <p>
+                            A verifier exists for this finding type, but it cannot run because the proposal is missing:
+                            <strong>{{ finding.verification_missing_fields | join(', ') }}</strong>.
+                            No evidence will be fabricated.
+                        </p>
+                    </div>
+                    <button disabled class="verification-action disabled-action">Verification unavailable</button>
                     {% elif finding.static_verification_pending %}
                     <div class="verification-ready-icon muted-icon">!</div>
                     <div>
@@ -523,7 +538,7 @@ Finding Proposed
                     <div class="technical-evidence-content">
                         {% for test in finding.evidence %}
                         <article class="technical-test">
-                            <header><div><small>{{ test.test_id }}</small><strong>{{ test.name }}</strong></div></header>
+                            <header><div><small>{{ test.display_id or test.test_id }}</small><strong>{{ test.name }}</strong></div></header>
                             {% if finding.evidence_source == "STATIC" %}
                             <div class="technical-field"><span>Deterministic check</span><pre>{{ test.request }}</pre></div>
                             <details class="raw-response static-source-details">
@@ -1014,18 +1029,23 @@ Finding Proposed
             </h3>
 
 
+            {% if finding.analysis_id %}
+
+            <a
+                class="action-link-button"
+                href="{{ url_for('analysis_report', analysis_id=finding.analysis_id) }}"
+            >
+                View Analysis Report
+            </a>
+
+
+            {% else %}
+
             <button disabled>
-
-                View in Report
-
+                Report unavailable
             </button>
 
-
-            <button disabled>
-
-                Export Finding
-
-            </button>
+            {% endif %}
 
 
         </article>
@@ -1038,4 +1058,3 @@ Finding Proposed
 
 
 {% endblock %}
-

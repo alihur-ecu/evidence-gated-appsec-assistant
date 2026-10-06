@@ -182,8 +182,19 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
                 metadata.get("parameter")
                 or metadata.get("parameter_name")
                 or metadata.get("field_name")
-                or "-"
             )
+            if not parameter:
+                dynamic_parameters = metadata.get("parameters")
+                if isinstance(dynamic_parameters, (list, tuple)):
+                    names = [
+                        str(item.get("name", "")).strip()
+                        for item in dynamic_parameters
+                        if isinstance(item, dict)
+                        and str(item.get("name", "")).strip()
+                    ]
+                    parameter = ", ".join(names) or "-"
+                else:
+                    parameter = "-"
 
             print(
                 "\n"
@@ -419,3 +430,4 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
         )
 
         return {"findings": []}
+

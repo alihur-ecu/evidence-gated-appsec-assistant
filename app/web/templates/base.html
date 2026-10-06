@@ -117,11 +117,10 @@
             </a>
 
 
-            <!-- Reports
-                 Not implemented yet -->
+            <!-- Reports -->
 
             <a
-                href="#"
+                href="{{ url_for('reports_list') }}"
                 class="{% if active_page == 'reports' %}active{% endif %}"
             >
                 Reports
@@ -206,19 +205,16 @@
             </div>
 
 
-            <div class="top-status">
+            <div class="topbar-right">
+                {% block topbar_actions %}{% endblock %}
 
-                <span class="dot"></span>
-
-
-                {% block top_status %}
-
-                Application
-
-                {% endblock %}
-
+                <div class="top-status">
+                    <span class="dot"></span>
+                    {% block top_status %}
+                    Application
+                    {% endblock %}
+                </div>
             </div>
-
 
         </header>
 

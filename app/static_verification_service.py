@@ -179,7 +179,7 @@ class StaticVerificationService:
             if isinstance(chunk, str):
                 result.append({
                     "file": "", "text": chunk, "start_line": 1,
-                    "end_line": None, "index": index,
+                    "end_line": None, "index": index, "chunk_id": None,
                 })
                 continue
             if not isinstance(chunk, dict):
@@ -213,6 +213,7 @@ class StaticVerificationService:
                 "start_line": start_line,
                 "end_line": chunk.get("end_line") or chunk.get("line_end"),
                 "index": index,
+                "chunk_id": chunk.get("chunk_id") or chunk.get("context_id"),
             })
         return result
 
@@ -222,6 +223,30 @@ class StaticVerificationService:
         finding: Finding,
         metadata: dict[str, Any],
     ) -> list[dict[str, Any]]:
+        # Strongest provenance signal: the exact bounded context(s) that
+        # produced the proposal. This avoids falling back to unrelated chunks
+        # when a valid static finding has no HTTP endpoint or parameter.
+        wanted_chunk_ids = []
+        direct_chunk = metadata.get("chunk_id")
+        if direct_chunk:
+            wanted_chunk_ids.append(str(direct_chunk))
+        observed = metadata.get("observed_in_chunks") or []
+        if isinstance(observed, str):
+            observed = [observed]
+        if isinstance(observed, (list, tuple, set)):
+            for value in observed:
+                value = str(value).strip()
+                if value and value not in wanted_chunk_ids:
+                    wanted_chunk_ids.append(value)
+
+        if wanted_chunk_ids:
+            matches = [
+                c for c in chunks
+                if c.get("chunk_id") and str(c.get("chunk_id")) in wanted_chunk_ids
+            ]
+            if matches:
+                return matches
+
         wanted = str(
             metadata.get("source_file") or finding.source_file or ""
         ).replace("\\", "/").lower()

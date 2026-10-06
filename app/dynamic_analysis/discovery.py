@@ -48,6 +48,7 @@ from app.dynamic_analysis.target import DynamicTarget
 DEFAULT_REQUEST_TIMEOUT = 10
 DEFAULT_MAX_PAGES = 10
 DEFAULT_MAX_RESPONSE_BYTES = 1_000_000
+DEFAULT_MAX_RESPONSE_EXCERPT_CHARS = 2_000
 
 DISCOVERY_USER_AGENT = "Evidence-Gated-AppSec/0.1 Discovery"
 
@@ -123,6 +124,9 @@ class DiscoveredPage:
     response_header_names: tuple[str, ...] = ()
     cookie_names: tuple[str, ...] = ()
     redirect_count: int = 0
+    # Small, bounded textual sample of the already-fetched response.
+    # This is observation only; it is never treated as verification evidence.
+    response_excerpt: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -139,6 +143,7 @@ class DiscoveredPage:
                 self.cookie_names
             ),
             "redirect_count": self.redirect_count,
+            "response_excerpt": self.response_excerpt,
         }
 
 
@@ -240,6 +245,7 @@ class DynamicDiscovery:
         request_timeout: int = DEFAULT_REQUEST_TIMEOUT,
         max_pages: int = DEFAULT_MAX_PAGES,
         max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
+        max_response_excerpt_chars: int = DEFAULT_MAX_RESPONSE_EXCERPT_CHARS,
     ) -> None:
         if request_timeout <= 0:
             raise ValueError(
@@ -256,6 +262,11 @@ class DynamicDiscovery:
                 "max_response_bytes must be greater than zero."
             )
 
+        if max_response_excerpt_chars <= 0:
+            raise ValueError(
+                "max_response_excerpt_chars must be greater than zero."
+            )
+
         self.session = session or requests.Session()
 
         self.session.headers.update({
@@ -265,6 +276,7 @@ class DynamicDiscovery:
         self.request_timeout = request_timeout
         self.max_pages = max_pages
         self.max_response_bytes = max_response_bytes
+        self.max_response_excerpt_chars = max_response_excerpt_chars
 
     def discover(
         self,
@@ -403,6 +415,13 @@ class DynamicDiscovery:
                 )
             )
 
+            response_excerpt = _build_response_excerpt(
+                response=response,
+                content_type=content_type,
+                within_body_budget=within_body_budget,
+                max_chars=self.max_response_excerpt_chars,
+            )
+
             result.pages.append(
                 DiscoveredPage(
                     requested_url=current_url,
@@ -416,6 +435,7 @@ class DynamicDiscovery:
                     ),
                     cookie_names=cookie_names,
                     redirect_count=redirect_count,
+                    response_excerpt=response_excerpt,
                 )
             )
 
@@ -841,6 +861,54 @@ def _normalise_discovery_url(
     )
 
 
+def _build_response_excerpt(
+    *,
+    response: requests.Response,
+    content_type: str | None,
+    within_body_budget: bool,
+    max_chars: int,
+) -> str | None:
+    """Return a bounded textual sample of an already-fetched response.
+
+    No additional request is made. Binary/oversized responses are ignored.
+    HTML is reduced to visible text so hidden fields, scripts and markup are
+    not forwarded merely for proposal generation. JSON/text responses retain
+    their textual representation.
+    """
+
+    if not within_body_budget:
+        return None
+
+    lowered = str(content_type or "").lower()
+    textual = (
+        not lowered
+        or lowered.startswith("text/")
+        or "json" in lowered
+        or "xml" in lowered
+        or "javascript" in lowered
+        or "x-www-form-urlencoded" in lowered
+    )
+    if not textual:
+        return None
+
+    text = response.text or ""
+    if _is_html_response(content_type):
+        soup = BeautifulSoup(text, "html.parser")
+        for element in soup(["script", "style", "noscript"]):
+            element.decompose()
+        text = soup.get_text(" ", strip=True)
+
+    # Keep the excerpt compact and deterministic without changing content.
+    text = " ".join(text.split())
+    if not text:
+        return None
+
+    if len(text) <= max_chars:
+        return text
+
+    return text[:max_chars] + "…"
+
+
 def _is_html_response(
     content_type: str | None,
 ) -> bool:
@@ -882,3 +950,4 @@ def _append_endpoint(
     endpoint_keys.add(
         key
     )
+
