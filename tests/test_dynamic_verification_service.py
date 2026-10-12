@@ -15,6 +15,7 @@ from app.dynamic_analysis.evidence.models import (
     VerificationDecision,
     VerificationResult,
 )
+from app.dynamic_analysis.planning.candidate_builder import ProbeCandidateBuilder
 from app.dynamic_analysis.probes.injection.probe import (
     InjectionProbeInput,
 )
@@ -515,3 +516,20 @@ def test_convenience_boundary_returns_serializable_contract():
         ]
         == "injection-differential-verifier"
     )
+
+def test_saved_candidates_reuse_original_discovery_without_new_crawl():
+    class DiscoveryMustNotRun:
+        def discover(self, target):
+            raise AssertionError("Saved candidate path must not re-run discovery.")
+
+    candidates = ProbeCandidateBuilder().build(_discovery_result())
+    service = DynamicVerificationService(
+        discovery=DiscoveryMustNotRun(),
+        saved_candidates=candidates,
+        input_factory=FakeInputFactory(),
+        probe=FakeProbe(_evidence()),
+        verifier=FakeVerifier(_verification()),
+    )
+    result = service.verify(_finding())
+    assert result.finding_status is FindingStatus.PROVED
+    assert result.candidate.fixed_parameters == {"Submit": "Submit"}

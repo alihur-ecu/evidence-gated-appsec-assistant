@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Scan History | Evidence-Gated AppSec Finding Assistant{% endblock %}
+{% block current_focus %}Scan History{% endblock %}
+{% block target_selector %}<strong>Completed Scans</strong>{% endblock %}
+{% block top_status %}Persistent History{% endblock %}
+{% block content %}
+<div class="report-page scan-history-page">
+    <section class="report-hero">
+        <div>
+            <span class="analysis-provider-badge">SCAN STORE</span>
+            <h1>Scan History</h1>
+            <p class="muted">Browse completed analyses, verification evidence and human decisions without rerunning discovery or the LLM.</p>
+        </div>
+        <a class="action-link-button" href="{{ url_for('home') }}">+ New Analysis</a>
+    </section>
+
+    {% if archived %}
+    <div class="history-archive-notice" role="status">Scan {{ archived }} moved to local Trash. Other analyses were not changed.</div>
+    {% endif %}
+
+    {% if scans %}
+    <div class="history-toolbar">
+        <label for="scanHistorySearch">Find a scan</label>
+        <input id="scanHistorySearch" type="search" placeholder="Search target, ID, provider or date" autocomplete="off" aria-controls="scanHistoryRows">
+        <span id="scanHistoryCount" aria-live="polite">{{ scans|length }} scan(s)</span>
+    </div>
+    <div class="history-table-scroll">
+        <table class="history-list-table" aria-label="Completed scan history">
+            <thead>
+                <tr>
+                    <th scope="col">Analysis</th>
+                    <th scope="col">Target / source</th>
+                    <th scope="col">Findings</th>
+                    <th scope="col">Date and time (Perth)</th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="scanHistoryRows">
+            {% for item in scans %}
+                <tr class="history-scan-row" data-history-row>
+                    <td>
+                        <strong class="history-scan-id">{{ item.analysis_id }}</strong>
+                        <span class="history-scan-meta">{{ item.analysis_type }} · {{ item.provider }}{% if item.authentication_mode != '—' %} · {{ item.authentication_mode }}{% endif %}</span>
+                    </td>
+                    <td><span class="history-target" title="{{ item.target }}">{{ item.target }}</span></td>
+                    <td><span class="history-findings">{{ item.finding_count }}</span></td>
+                    <td>
+                        <time class="history-local-time" {% if item.completed_at_utc %}datetime="{{ item.completed_at_utc }}"{% endif %}>{{ item.completed_at_local }}</time>
+                        <span class="history-time-caption">{{ item.time_caption }}</span>
+                    </td>
+                    <td>
+                        <div class="history-row-actions">
+                            <a class="action-link-button history-action" href="{{ url_for('open_scan_history', analysis_id=item.analysis_id) }}">Open</a>
+                            {% if item.has_report %}
+                            <a class="action-link-button action-link-button-secondary history-action" href="{{ url_for('saved_report', analysis_id=item.analysis_id) }}">Report</a>
+                            {% else %}
+                            <a class="action-link-button action-link-button-secondary history-action" href="{{ url_for('open_scan_history_report', analysis_id=item.analysis_id) }}">Report</a>
+                            {% endif %}
+                            <form method="post" class="history-archive-form" action="{{ url_for('archive_scan_history', analysis_id=item.analysis_id) }}" data-analysis-id="{{ item.analysis_id }}">
+                                <input type="hidden" name="archive_token" value="{{ archive_token }}">
+                                <button class="history-delete-button" type="submit" title="Move saved scan and report to recoverable local Trash">Delete</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <p id="scanHistoryNoMatches" hidden>No scans match your search.</p>
+    </div>
+    <p class="history-footnote">"Delete" moves the selected scan and its saved report to <code>artifacts/scan_history/.trash</code> for recovery. Other scans and standalone evidence files remain untouched. "Saved (legacy)" indicates that the original completion time was not recorded.</p>
+    {% else %}
+    <div class="analysis-empty-state">
+        <strong>No completed scans have been stored yet.</strong>
+        <p>The next successful static or dynamic analysis will appear here automatically.</p>
+    </div>
+    {% endif %}
+</div>
+<script src="{{ url_for('static', filename='js/scan_history.js') }}" defer></script>
+{% endblock %}

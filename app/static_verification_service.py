@@ -46,10 +46,11 @@ class StaticVerificationService:
             raise StaticVerificationError(
                 "Only PROPOSED findings may enter static verification."
             )
+        if finding.finding_type is FindingType.XSS:
+            return self._verify_xss_source(finding, analysis_result=analysis_result, metadata=metadata)
         if finding.finding_type is not FindingType.SQL_INJECTION:
             raise StaticVerificationError(
-                "Static deterministic verification is currently implemented "
-                "for SQL_INJECTION findings."
+                "No deterministic static verifier is registered for this finding type."
             )
 
         metadata = metadata or {}
@@ -60,6 +61,7 @@ class StaticVerificationService:
             )
 
         relevant = self._select_relevant_chunks(chunks, finding, metadata)
+        relevant = self._apply_source_scope(relevant, finding, metadata)
         parameter = (finding.parameter or "").strip()
         windows = self._build_local_windows(
             relevant,
@@ -90,7 +92,10 @@ class StaticVerificationService:
         input_observed = bool(input_windows)
         sql_observed = bool(sql_windows)
         unsafe_composition = bool(unsafe_windows)
-        parameterised = bool(parameterised_windows)
+        # SQL %-formatting is string interpolation, not safe bound-parameter
+        # execution. Do not present contradictory "parameterized" evidence
+        # when unsafe composition is already established in this source scope.
+        parameterised = bool(parameterised_windows) and not unsafe_composition
 
         # A safe query elsewhere in a file must not cancel a localized unsafe flow.
         if input_observed and sql_observed and unsafe_composition:
@@ -169,6 +174,106 @@ class StaticVerificationService:
             },
         }
         return StaticVerificationResult(finding.finding_id, status, evidence)
+
+    # Conservative XSS source observations. This is NOT an exploitability proof.
+    # The evidence gate remains NEEDS_HUMAN unless a dedicated source-to-sink
+    # flow verifier with context-sensitive escaping analysis is implemented.
+    _XSS_INPUT = re.compile(r"(?:\$_(?:GET|POST|REQUEST)|request\.(?:args|form|values|GET|POST)|req\.(?:query|body|params))", re.I)
+    _XSS_OUTPUT = re.compile(r"(?:\becho\b|\bprint\s*\(|\binnerHTML\b|\bouterHTML\b|\bdocument\.write\s*\(|\bres\.send\s*\(|\brender_template_string\s*\(|\|\s*safe\b)", re.I)
+    _XSS_ESCAPE = re.compile(r"(?:htmlspecialchars|htmlentities|escape\s*\(|\bhtml\.escape\s*\(|\btextContent\b|\binnerText\b)", re.I)
+
+    def _verify_xss_source(
+        self, finding: Finding, *, analysis_result: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+    ) -> StaticVerificationResult:
+        metadata = metadata or {}
+        chunks = list(self._normalise_chunks(analysis_result.get("source_context", [])))
+        if not chunks:
+            raise StaticVerificationError("Retained source context is required for XSS source observations.")
+        relevant = self._select_relevant_chunks(chunks, finding, metadata)
+        relevant = self._apply_source_scope(relevant, finding, metadata)
+        # Restrict evidence to the proposal's selected source context.
+        observations = []
+        signals = {"input_source_observed": False, "html_output_observed": False,
+                   "escaping_pattern_observed": False}
+        patterns = (
+            ("input_source_observed", self._XSS_INPUT, "Potential untrusted input"),
+            ("html_output_observed", self._XSS_OUTPUT, "Potential HTML output sink"),
+            ("escaping_pattern_observed", self._XSS_ESCAPE, "Possible output escaping or safe text sink"),
+        )
+        for index, (key, pattern, label) in enumerate(patterns, 1):
+            matched = []
+            for chunk in relevant:
+                lines = chunk["text"].splitlines()
+                for offset, line in enumerate(lines):
+                    if pattern.search(line):
+                        matched.append({
+                            "file": chunk["file"] or "retained source context",
+                            "line_number": int(chunk.get("start_line") or 1) + offset,
+                            "text": line[:400], "highlight": True,
+                        })
+            signals[key] = bool(matched)
+            observations.append({
+                "observation_id": f"S-{index:03d}", "label": key.upper(),
+                "name": label, "result": "OBSERVED" if matched else "NOT_ESTABLISHED",
+                "observed": bool(matched),
+                "detail": "Source pattern only; no end-to-end taint flow or contextual escaping proof.",
+                "source_lines": matched[:10],
+                "source_excerpt": "\n".join(f"{m['file']}:{m['line_number']}: {m['text']}" for m in matched[:10]),
+                "metadata": {"source_kind": "STATIC_SOURCE", "signal_kind": key},
+            })
+        status = FindingStatus.NEEDS_HUMAN
+        evidence = {
+            "finding_id": finding.finding_id, "run_id": f"static-{uuid4().hex}",
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "execution_status": "COMPLETED", "evidence_source": "STATIC",
+            "capability": "STATIC_XSS_SOURCE_OBSERVATION",
+            "evidence_gate_result": status.value, "observations": observations,
+            "signals": signals,
+            "verification": {
+                "verifier_id": "static_xss_source_observation", "decision": status.value,
+                "reasons": ["Potential input/output/escaping patterns were inspected in retained source. "
+                            "A source-to-sink flow and output encoding have not been proved; human review is required."],
+            },
+        }
+        return StaticVerificationResult(finding.finding_id, status, evidence)
+
+    @staticmethod
+    def _apply_source_scope(
+        chunks: list[dict[str, Any]], finding: Finding, metadata: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Clip source-pattern evidence to the identified function.
+
+        Prevents a finding on one route from borrowing SQL signals from a
+        different route within the same Python file. Linked templates remain
+        available for XSS observations. Provider LLM findings remain unchanged.
+        """
+        if metadata.get("proposal_source") != "STATIC_SOURCE_PATTERN":
+            return chunks
+        scope = metadata.get("source_scope")
+        if not isinstance(scope, (tuple, list)) or len(scope) != 2:
+            return chunks
+        try:
+            low, high = int(scope[0]), int(scope[1])
+        except (TypeError, ValueError):
+            return chunks
+        if low < 1 or high < low:
+            return chunks
+        origin = str(metadata.get("source_file") or finding.source_file or "").replace("\\", "/").lower()
+        restricted = []
+        for chunk in chunks:
+            name = str(chunk.get("file") or "").replace("\\", "/").lower()
+            if name != origin:
+                # E.g. a separately retained template with an explicit |safe.
+                restricted.append(chunk)
+                continue
+            start = int(chunk.get("start_line") or 1)
+            lines = chunk["text"].splitlines()
+            keep = [(start+i, line) for i, line in enumerate(lines) if low <= start+i <= high]
+            if keep:
+                restricted.append({**chunk, "text": "\n".join(line for _,line in keep),
+                                   "start_line": keep[0][0], "end_line": keep[-1][0]})
+        return restricted
 
     @staticmethod
     def _normalise_chunks(raw: Any) -> Iterable[dict[str, Any]]:

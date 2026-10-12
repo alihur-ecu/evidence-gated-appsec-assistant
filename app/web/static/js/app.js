@@ -132,10 +132,50 @@ document.addEventListener(
             }
 
             async function waitForAnalysisJob(jobId) {
+                // A brief connection failure should not discard a running scan.
+                // Persistent failures are surfaced rather than retried forever.
+                let consecutiveNetworkFailures = 0;
+                const maxNetworkFailures = 5;
                 while (true) {
-                    const statusResponse = await fetch(`/analysis/jobs/${encodeURIComponent(jobId)}`, { cache: "no-store" });
-                    const state = await statusResponse.json();
-                    if (!statusResponse.ok || !state.ok) throw new Error(state.error || "Unable to read analysis progress.");
+                    let statusResponse;
+                    try {
+                        statusResponse = await fetch(
+                            `/analysis/jobs/${encodeURIComponent(jobId)}`,
+                            { cache: "no-store" }
+                        );
+                    } catch (error) {
+                        consecutiveNetworkFailures += 1;
+                        if (consecutiveNetworkFailures >= maxNetworkFailures) {
+                            throw new Error(
+                                "Connection to the analysis server was lost. " +
+                                "Check the Flask console for a restart or crash; " +
+                                "the analysis result cannot be confirmed."
+                            );
+                        }
+                        if (analysisProgressMessage) {
+                            analysisProgressMessage.textContent =
+                                `Connection interrupted; retrying (${consecutiveNetworkFailures}/${maxNetworkFailures})...`;
+                        }
+                        await new Promise(resolve => window.setTimeout(resolve, 1500));
+                        continue;
+                    }
+                    consecutiveNetworkFailures = 0;
+                    if (!statusResponse.ok) {
+                        if (statusResponse.status === 404) {
+                            throw new Error(
+                                "The analysis job is no longer available on the server. " +
+                                "The Flask process may have restarted; check its console."
+                            );
+                        }
+                        throw new Error(`Unable to read analysis progress (HTTP ${statusResponse.status}).`);
+                    }
+                    let state;
+                    try {
+                        state = await statusResponse.json();
+                    } catch (error) {
+                        throw new Error("The analysis server returned an invalid progress response.");
+                    }
+                    if (!state.ok) throw new Error(state.error || "Unable to read analysis progress.");
                     renderAnalysisProgress(state);
                     if (state.status === "COMPLETED") return state;
                     if (state.status === "FAILED") throw new Error(state.error || state.message || "Analysis failed.");

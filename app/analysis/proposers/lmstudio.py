@@ -32,6 +32,9 @@ from app.analysis.proposers.openai import (
 DEFAULT_LMSTUDIO_MODEL = "google/gemma-4-e4b"
 DEFAULT_LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
 DEFAULT_LMSTUDIO_API_KEY = "lm-studio"
+DEFAULT_LMSTUDIO_MAX_TOKENS = 1024
+DEFAULT_LMSTUDIO_STATIC_MAX_TOKENS = 4096
+DEFAULT_LMSTUDIO_TEMPERATURE = 0.0
 
 
 class LMStudioStaticProposer(OpenAIStaticProposer):
@@ -63,6 +66,23 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
             or os.getenv("LMSTUDIO_MODEL")
             or DEFAULT_LMSTUDIO_MODEL
         )
+
+        self.max_output_tokens = int(os.getenv("LMSTUDIO_MAX_TOKENS", str(DEFAULT_LMSTUDIO_MAX_TOKENS)))
+        if self.max_output_tokens <= 0:
+            raise ValueError("LMSTUDIO_MAX_TOKENS must be positive")
+        self.static_max_output_tokens = int(os.getenv(
+            "LMSTUDIO_STATIC_MAX_TOKENS", str(DEFAULT_LMSTUDIO_STATIC_MAX_TOKENS)
+        ))
+        if self.static_max_output_tokens <= 0:
+            raise ValueError("LMSTUDIO_STATIC_MAX_TOKENS must be positive")
+
+        # Zero is the reproducible default, not a guarantee of identical
+        # outputs across inference engines, model versions or prompts.
+        self.temperature = float(os.getenv(
+            "LMSTUDIO_TEMPERATURE", str(DEFAULT_LMSTUDIO_TEMPERATURE)
+        ))
+        if not (0.0 <= self.temperature <= 2.0):
+            raise ValueError("LMSTUDIO_TEMPERATURE must be between 0 and 2")
 
         client = OpenAI(
             api_key=resolved_api_key,
@@ -118,10 +138,13 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
             chunks=chunks,
         )
 
+        self.last_execution_report.update({
+            "model": self.model,
+            "temperature": self.temperature,
+            "max_output_tokens": self.static_max_output_tokens,
+        })
         for proposal in proposals:
-            if "proposal_source" in proposal:
-                proposal["proposal_source"] = "LMSTUDIO"
-
+            proposal["proposal_source"] = "LMSTUDIO"
         return proposals
 
     def propose_contexts(
@@ -140,6 +163,13 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
         """
         proposals: list[dict[str, Any]] = []
         self.last_execution_report = self._empty_execution_report()
+        self.last_execution_report.update({
+            "model": self.model,
+            "temperature": self.temperature,
+            "max_output_tokens": self.max_output_tokens,
+            "contexts_planned": 0,
+            "context_outcomes": [],
+        })
 
         valid_contexts = [
             context
@@ -149,6 +179,7 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
         ]
 
         total = len(valid_contexts)
+        self.last_execution_report["contexts_planned"] = total
 
         print(
             "\n"
@@ -229,6 +260,11 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
                     raise
 
                 self.last_execution_report["chunks_failed"] += 1
+                self.last_execution_report["context_outcomes"].append({
+                    "context_id": context.context_id,
+                    "outcome": "FAILED",
+                    "finding_count": 0,
+                })
 
                 status_code = self._extract_status_code(exc)
                 self.last_execution_report["failed_chunks"].append(
@@ -262,6 +298,11 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
             elapsed = time.perf_counter() - context_started
 
             self.last_execution_report["chunks_succeeded"] += 1
+            self.last_execution_report["context_outcomes"].append({
+                "context_id": context.context_id,
+                "outcome": "SUCCESS",
+                "finding_count": len(context_proposals),
+            })
 
             for proposal in context_proposals:
                 if "proposal_source" in proposal:
@@ -297,6 +338,7 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
         *,
         prompt: str,
         system_instruction: str,
+        max_tokens: int | None = None,
     ) -> Any:
         """
         Shared LM Studio request path for both static and generic contexts.
@@ -319,7 +361,8 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
                             "content": full_prompt,
                         },
                     ],
-                    temperature=0.2,
+                    temperature=self.temperature,
+                    max_tokens=max_tokens if max_tokens is not None else self.max_output_tokens,
                 )
 
             except Exception as exc:
@@ -345,10 +388,28 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
         """
         Static chunk request using LM Studio chat completions.
         """
-        return self._chat_completion_with_retry(
+        response = self._chat_completion_with_retry(
             prompt=prompt,
-            system_instruction=SYSTEM_INSTRUCTION,
+            system_instruction=(
+                SYSTEM_INSTRUCTION + "\nFor Python source, examine every distinct "
+                "source-to-SQL-execution flow, including string concatenation, "
+                "f-strings, percent formatting, format(), and dynamic ORDER BY. "
+                "Also examine unsafe HTML rendering. Return separate candidates "
+                "for separate source locations; do not invent or promote findings."
+            ),
+            max_tokens=self.static_max_output_tokens,
         )
+        # The static scan must not silently accept incomplete JSON as a
+        # complete absence of other findings. Do not alter dynamic mode.
+        finish_reason = str(
+            getattr(response.choices[0], "finish_reason", "") or ""
+        ).lower()
+        if finish_reason in {"length", "max_tokens"}:
+            raise ValueError(
+                "LM Studio truncated this static response. Raise "
+                "LMSTUDIO_STATIC_MAX_TOKENS or lower the static chunk limit."
+            )
+        return response
 
     def _generate_context_with_retry(self, prompt: str) -> Any:
         """
@@ -374,7 +435,7 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
                 "choices[0].message.content.",
                 flush=True,
             )
-            return {"findings": []}
+            raise ValueError("LM Studio returned a response without message content")
 
         print(
             "\n"
@@ -389,7 +450,12 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
                 "[LMSTUDIO] Empty model response -> 0 findings.",
                 flush=True,
             )
-            return {"findings": []}
+            finish_reason = getattr(response.choices[0], "finish_reason", "unknown")
+            usage = getattr(response, "usage", None)
+            raise ValueError(
+                f"LM Studio returned empty content (finish_reason={finish_reason}, usage={usage}). "
+                "This is an incomplete LLM response, not a verified zero-findings result."
+            )
 
         try:
             payload = json.loads(text)
@@ -429,5 +495,5 @@ class LMStudioStaticProposer(OpenAIStaticProposer):
             flush=True,
         )
 
-        return {"findings": []}
+        raise ValueError("LM Studio returned invalid JSON; cannot treat it as zero findings")
 

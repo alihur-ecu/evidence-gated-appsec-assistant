@@ -174,9 +174,19 @@ STATIC_SQL_INJECTION_SOURCE = VerificationCapability(
 )
 
 
+STATIC_XSS_SOURCE_OBSERVATION = VerificationCapability(
+    capability_id="STATIC_XSS_SOURCE_OBSERVATION",
+    verifier_id="static_xss_source_observation",
+    mode=VerificationMode.STATIC,
+    finding_types=frozenset({FindingType.XSS}),
+    required_fields=(),
+)
+
+
 DEFAULT_VERIFICATION_CAPABILITIES = (
     INJECTION_DIFFERENTIAL,
     STATIC_SQL_INJECTION_SOURCE,
+    STATIC_XSS_SOURCE_OBSERVATION,
 )
 
 

@@ -143,6 +143,54 @@
             {% endif %}
         </div>
 
+        {% if analysis.proposal_status == "PARTIAL" %}
+        <div class="mock-disclosure mock-disclosure-warning">
+            <strong>Partial LLM proposal analysis</strong>
+            <p>
+                Some selected contexts could not be analysed successfully.
+                The finding count is incomplete, not evidence of an absence
+                of vulnerabilities.
+            </p>
+            {% if analysis.proposal_execution %}
+            <small>
+                {{ analysis.proposal_execution.chunks_succeeded | default(0) }}
+                successful request(s) ·
+                {{ analysis.proposal_execution.chunks_failed | default(0) }}
+                failed request(s)
+            </small>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if analysis.context_build and analysis.context_build.coverage %}
+        <div class="mock-disclosure">
+            <strong>LLM context coverage and reproducibility</strong>
+            <p>
+                {{ analysis.context_build.coverage.contexts_selected | default(0) }}
+                of {{ analysis.context_build.coverage.contexts_created | default(0) }}
+                discovered analysis contexts were selected.
+                {% if analysis.context_build.coverage.truncated %}
+                    Context coverage was limited by the configured budget.
+                {% endif %}
+                Findings remain unverified proposals.
+            </p>
+            {% if analysis.context_build.coverage.selected_surface_sha256 %}
+            <small>
+                Selected surface fingerprint:
+                <code>{{ analysis.context_build.coverage.selected_surface_sha256[:16] }}</code>
+                · Input fingerprint:
+                <code>{{ analysis.context_build.coverage.selected_content_sha256[:16] }}</code>
+                {% if analysis.proposal_execution and analysis.proposal_execution.model %}
+                · Model: {{ analysis.proposal_execution.model }}
+                {% endif %}
+                {% if analysis.proposal_execution and analysis.proposal_execution.temperature is defined %}
+                · Temperature: {{ analysis.proposal_execution.temperature }}
+                {% endif %}
+            </small>
+            {% endif %}
+        </div>
+        {% endif %}
+
         {% endif %}
 
 
@@ -230,8 +278,9 @@
 
                     <p>
                         {% if findings %}
-                            Open a finding to continue to independent
-                            verification and human review.
+                            Open a finding to continue to independent verification and human review.
+                            Different proposed CWEs may refer to the same endpoint;
+                            each is a separate unverified hypothesis.
                         {% elif analysis.provider == "STATIC_SOURCE" %}
                             {% if analysis.proposal_status == "PARTIAL" %}
                                 Candidate generation completed partially; some contexts could not be analysed.
@@ -266,7 +315,7 @@
                             <th>Endpoint</th>
                             <th>Parameter</th>
                             <th>CWE</th>
-                            <th>Severity</th>
+                            <th>Suggested Severity</th>
                             <th>Status</th>
                             <th></th>
                         </tr>
@@ -286,6 +335,13 @@
 
                             <td>
                                 {{ finding.finding_type }}
+                                {% if finding.proposal_source == 'STATIC_SOURCE_PATTERN' %}
+                                <small style="display:block; margin-top:4px; opacity:0.78;">Source-pattern proposal · not LLM output</small>
+                                {% endif %}
+                                {% for note in finding.proposal_quality_notes %}
+                                <small style="display:block; margin-top:5px; color:#e5bc75; line-height:1.35; max-width:280px;"
+                                       title="Proposal context warning">{{ note }}</small>
+                                {% endfor %}
                             </td>
 
                             <td>
@@ -364,7 +420,23 @@
                         {% endif %}
                     </p>
 
-                    {% if analysis.context_coverage %}
+                    {% if analysis.source_pattern_proposal_count is defined %}
+                <small>
+                    {{ analysis.source_pattern_proposal_count }} conservative source-pattern
+                    candidate(s) recorded alongside LLM proposals. They are clearly identified
+                    in Finding Details and are NOT verified vulnerabilities.
+                </small>
+                {% endif %}
+                {% if analysis.llm_execution %}
+                <small>
+                    LLM requests: {{ analysis.llm_execution.chunks_succeeded | default(0) }} succeeded,
+                    {{ analysis.llm_execution.chunks_failed | default(0) }} failed.
+                    {% if analysis.proposal_status == 'PARTIAL' %}
+                    Analysis is PARTIAL; not all source chunks were processed successfully.
+                    {% endif %}
+                </small>
+                {% endif %}
+                {% if analysis.context_coverage %}
 
                     <p>
                         <strong>

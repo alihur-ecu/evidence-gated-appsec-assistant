@@ -33,6 +33,8 @@ import time
 import os
 import shutil
 import threading
+import secrets
+import hmac
 from datetime import datetime, timezone
 
 
@@ -100,7 +102,13 @@ from app.dynamic_analysis.authentication import (
     create_analysis_session,
     normalise_authentication_mode,
 )
-from app.analysis.finding_adapter import adapt_analysis_result
+from app.web.scan_history_store import archive_saved_scan, display_awst_timestamp
+from app.analysis.finding_adapter import TYPE_MAP, adapt_analysis_result
+from app.analysis.finding_presentation import (
+    finding_label,
+    effective_cwe,
+    proposal_quality_notes,
+)
 
 from app.models.finding import (
     Finding,
@@ -121,6 +129,9 @@ from app.dynamic_analysis.verification_router import (
     VerificationReadiness,
     route_finding_for_verification,
 )
+from app.dynamic_analysis.verification_readiness import (
+    preflight_saved_candidate,
+)
 
 
 app = Flask(__name__)
@@ -136,7 +147,30 @@ FINDING_TYPE_LABELS = {
 
     FindingType.XSS:
         "Potential Cross-Site Scripting",
+
+    FindingType.FILE_UPLOAD:
+        "Potential Unrestricted File Upload",
+
+    FindingType.CSRF:
+        "Potential Cross-Site Request Forgery",
+
+    FindingType.AUTHENTICATION_RATE_LIMITING:
+        "Potential Brute-Force Protection Weakness",
+
+    FindingType.CODE_INJECTION:
+        "Potential Code Injection",
+
+    FindingType.FILE_INCLUSION:
+        "Potential File Inclusion",
+
+    FindingType.COMMAND_INJECTION:
+        "Potential Command Injection",
 }
+
+
+def _finding_type_label(finding: Finding, metadata: dict | None = None) -> str:
+    """Human-readable classification (including historical OTHER records)."""
+    return finding_label(finding, metadata)
 
 
 # ======================================================================
@@ -502,6 +536,63 @@ def save_web_evidence(
     return json_file, csv_file
 
 
+def _resolve_runtime_finding_endpoint(finding: Finding, target_url: str) -> Finding:
+    """Use RFC URL joining: root-relative paths stay at the origin root."""
+    endpoint = (finding.endpoint or "").strip()
+    parts = urlsplit(endpoint)
+    if parts.scheme and parts.netloc:
+        return finding
+    return replace(finding, endpoint=urljoin(target_url, endpoint))
+
+
+def _saved_runtime_preflight(finding: Finding):
+    """Read-only preflight when this scan has a retained discovery snapshot.
+
+    Older synthetic/legacy findings without an analysis record preserve their
+    existing routing behaviour for backward compatibility.
+    """
+    if finding.scan_type.value == "STATIC":
+        return None
+    metadata = FINDING_METADATA.get(finding.finding_id, {})
+    analysis = ANALYSES.get(metadata.get("analysis_id"))
+    if not isinstance(analysis, dict):
+        return None
+    snapshot = analysis.get("discovery")
+    if not isinstance(snapshot, dict):
+        return None
+    target_url = str(
+        analysis.get("target")
+        or analysis.get("target_details", {}).get("base_url")
+        or analysis.get("target_details", {}).get("original_url")
+        or ""
+    ).strip()
+    if not target_url:
+        return None
+    resolved_finding = _resolve_runtime_finding_endpoint(finding, target_url)
+    return preflight_saved_candidate(resolved_finding, snapshot, target_url)
+
+
+def _runtime_readiness(finding: Finding, route):
+    """View/API readiness, including original discovery and auth-session scope."""
+    if not route.can_verify or route.mode is None or route.mode.value != "RUNTIME":
+        return route.readiness.value, route.reason, None
+    preflight = _saved_runtime_preflight(finding)
+    if preflight is not None and not preflight.ready:
+        return preflight.status, preflight.reason, preflight
+    metadata = FINDING_METADATA.get(finding.finding_id, {})
+    analysis_id = metadata.get("analysis_id")
+    analysis = ANALYSES.get(analysis_id)
+    if isinstance(analysis, dict):
+        mode = str(analysis.get("authentication_mode", "NONE")).upper()
+        if mode != "NONE" and ANALYSIS_SESSIONS.get(analysis_id) is None:
+            return (
+                "AUTH_SESSION_MISSING",
+                "The authenticated session is no longer available. Run a new authorised authenticated scan before verifying.",
+                preflight,
+            )
+    return "READY", route.reason, preflight
+
+
 def build_view_model(
     finding: Finding,
 ) -> dict:
@@ -537,6 +628,12 @@ def build_view_model(
             finding
         )
     )
+    runtime_readiness, runtime_reason, _ = _runtime_readiness(
+        finding, verification_route,
+    )
+    effective_can_verify = (
+        verification_route.can_verify and runtime_readiness == "READY"
+    )
 
     return {
         "finding_id":
@@ -549,10 +646,7 @@ def build_view_model(
             finding.scan_type.value,
 
         "finding_type":
-            FINDING_TYPE_LABELS.get(
-                finding.finding_type,
-                finding.finding_type.value,
-            ),
+            _finding_type_label(finding, metadata),
 
         "target":
             metadata.get(
@@ -591,10 +685,10 @@ def build_view_model(
             finding.method,
 
         "proposed_cwe":
-            metadata.get(
-                "proposed_cwe",
-                "Not available",
-            ),
+            effective_cwe(finding, metadata) or "Not available",
+
+        "proposal_quality_notes":
+            proposal_quality_notes(finding, metadata),
 
         "reason":
             finding.explanation,
@@ -685,18 +779,18 @@ def build_view_model(
         # Verification availability is capability-driven. The web layer
         # does not decide support from a vulnerability-specific if/elif chain.
         "verification_supported":
-            verification_route.can_verify,
+            effective_can_verify,
 
         "runtime_verification_supported":
             (
-                verification_route.can_verify
+                effective_can_verify
                 and verification_route.mode is not None
                 and verification_route.mode.value == "RUNTIME"
             ),
 
         "static_verification_supported":
             (
-                verification_route.can_verify
+                effective_can_verify
                 and verification_route.mode is not None
                 and verification_route.mode.value == "STATIC"
             ),
@@ -708,7 +802,7 @@ def build_view_model(
             ),
 
         "verification_readiness":
-            verification_route.readiness.value,
+            runtime_readiness,
 
         "verification_capability":
             verification_route.capability_id,
@@ -729,7 +823,7 @@ def build_view_model(
             ),
 
         "verification_reason":
-            verification_route.reason,
+            runtime_reason,
     }
 
 
@@ -756,6 +850,11 @@ def register_analysis_result(analysis_result: dict) -> list[dict]:
     analysis_id = analysis_result["analysis_id"]
     ANALYSES[analysis_id] = analysis_result
     LATEST_ANALYSIS_ID = analysis_id
+
+    # Persist the completed scan immediately. This is intentionally separate
+    # from report generation: Scan History stores the application state needed
+    # to reopen an analysis without rerunning discovery or the LLM.
+    _save_scan_snapshot(analysis_id)
 
     return [build_view_model(finding) for finding in FINDINGS.values()]
 
@@ -836,6 +935,10 @@ def prepare_dynamic_analysis_result(
             "context_build",
             {},
         ),
+        # Preserve the actual LLM execution result in Scan History.
+        # A partial proposal stage must not look like a complete scan.
+        "proposal_status": dynamic_result.get("proposal_status", "SUCCESS"),
+        "proposal_execution": dynamic_result.get("proposal_execution"),
         "findings": findings,
         "proposals": findings,
     }
@@ -930,8 +1033,8 @@ class _ProgressTrackingProposer:
         _job_update(
             self._job_id,
             llm_completed=min(completed, self.total_items),
-            progress=100,
-            message="LLM proposal analysis complete.",
+            progress=99,
+            message="LLM proposal stage finished; awaiting final analysis status.",
         )
 
     def live_progress(self) -> dict:
@@ -1708,7 +1811,7 @@ def verify_finding(
 
         # Static and dynamic findings use separate evidence domains.
         if finding.scan_type.value == "STATIC":
-            if verification_route.verifier_id != "static_sql_injection_source":
+            if verification_route.verifier_id not in {"static_sql_injection_source", "static_xss_source_observation"}:
                 return jsonify({
                     "ok": False,
                     "code": "STATIC_VERIFICATION_EXECUTOR_UNAVAILABLE",
@@ -1731,6 +1834,7 @@ def verify_finding(
             finding.status = static_result.finding_status
             evidence = static_result.evidence
             EVIDENCE_BY_FINDING[finding_id] = evidence
+            _save_scan_snapshot(analysis_id)
 
             artifacts_dir = Path("artifacts") / "runs"
             artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -1775,10 +1879,7 @@ def verify_finding(
                     ),
                 }), 409
 
-            absolute_endpoint = urljoin(
-                runtime_target_url.rstrip("/") + "/",
-                endpoint.lstrip("/"),
-            )
+            absolute_endpoint = urljoin(runtime_target_url, endpoint)
             verification_finding = replace(
                 finding,
                 endpoint=absolute_endpoint,
@@ -1804,9 +1905,23 @@ def verify_finding(
                 ),
             }), 501
 
-        service = DynamicVerificationService(
-            session=analysis_session,
+        runtime_readiness, runtime_reason, preflight = _runtime_readiness(
+            verification_finding, verification_route,
         )
+        if runtime_readiness != "READY":
+            return jsonify({
+                "ok": False,
+                "code": runtime_readiness,
+                "verification_readiness": runtime_readiness,
+                "error": runtime_reason,
+            }), 409
+
+        # An original scan snapshot gives the exact observed request context.
+        # Passing it avoids a second crawler producing different candidates.
+        service_options = {"session": analysis_session}
+        if preflight is not None and preflight.candidate is not None:
+            service_options["saved_candidates"] = (preflight.candidate,)
+        service = DynamicVerificationService(**service_options)
         result = service.verify(verification_finding)
 
         # The verifier result becomes the canonical verification status.
@@ -1817,6 +1932,7 @@ def verify_finding(
         json_file, csv_file = save_web_evidence(evidence)
 
         EVIDENCE_BY_FINDING[finding_id] = evidence
+        _save_scan_snapshot(analysis_id)
 
         return jsonify({
             "ok": True,
@@ -1933,11 +2049,266 @@ def update_review(
         {},
     )[field] = value
 
+    analysis_id = FINDING_METADATA.get(finding_id, {}).get("analysis_id")
+    if analysis_id:
+        _save_scan_snapshot(analysis_id)
+
     return jsonify({
         "ok": True,
         "field": field,
         "value": value,
     })
+
+
+# ======================================================================
+# PERSISTENT SCAN HISTORY
+# ======================================================================
+
+SCAN_HISTORY_DIR = Path("artifacts") / "scan_history"
+# A process-local CSRF token is required for the state-changing archive action.
+SCAN_HISTORY_ARCHIVE_TOKEN = secrets.token_urlsafe(32)
+
+
+def _safe_analysis_id(analysis_id: str) -> str:
+    safe_id = "".join(ch for ch in analysis_id if ch.isalnum() or ch in {"-", "_"})
+    if not safe_id or safe_id != analysis_id:
+        abort(400)
+    return safe_id
+
+
+def _scan_snapshot_path(analysis_id: str) -> Path:
+    return SCAN_HISTORY_DIR / f"{_safe_analysis_id(analysis_id)}.json"
+
+
+def _save_scan_snapshot(analysis_id: str) -> None:
+    """Persist one complete analysis state without credentials or HTTP sessions."""
+    analysis = ANALYSES.get(analysis_id)
+    if not isinstance(analysis, dict):
+        return
+
+    finding_ids = [
+        finding_id
+        for finding_id, metadata in FINDING_METADATA.items()
+        if metadata.get("analysis_id") == analysis_id and finding_id in FINDINGS
+    ]
+
+    # Keep the original completion time even after verification or review
+    # saves a newer snapshot. Legacy snapshots only have saved_at_utc.
+    existing = _load_scan_snapshot(analysis_id)
+    completed_at = (
+        existing.get("created_at_utc") or existing.get("saved_at_utc")
+        if isinstance(existing, dict) else None
+    ) or datetime.now(timezone.utc).isoformat()
+    completed_at_source = (
+        existing.get("completed_at_source", "LEGACY_SAVED_TIMESTAMP" if not existing.get("created_at_utc") else "CAPTURED")
+        if isinstance(existing, dict) else "CAPTURED"
+    )
+
+    snapshot = {
+        "schema_version": 1,
+        "analysis_id": analysis_id,
+        "created_at_utc": completed_at,
+        "completed_at_source": completed_at_source,
+        "saved_at_utc": datetime.now(timezone.utc).isoformat(),
+        "analysis": analysis,
+        "findings": [FINDINGS[finding_id].to_dict() for finding_id in finding_ids],
+        "finding_metadata": {
+            finding_id: FINDING_METADATA.get(finding_id, {})
+            for finding_id in finding_ids
+        },
+        "evidence_by_finding": {
+            finding_id: EVIDENCE_BY_FINDING[finding_id]
+            for finding_id in finding_ids
+            if finding_id in EVIDENCE_BY_FINDING
+        },
+        "review_by_finding": {
+            finding_id: REVIEW_BY_FINDING.get(finding_id, {})
+            for finding_id in finding_ids
+        },
+    }
+
+    SCAN_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    path = _scan_snapshot_path(analysis_id)
+    temporary_path = path.with_suffix(".json.tmp")
+    temporary_path.write_text(
+        json.dumps(snapshot, indent=2, default=str),
+        encoding="utf-8",
+    )
+    temporary_path.replace(path)
+
+
+def _load_scan_snapshot(analysis_id: str) -> dict | None:
+    path = _scan_snapshot_path(analysis_id)
+    if not path.is_file():
+        return None
+    try:
+        snapshot = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(snapshot, dict) or snapshot.get("analysis_id") != analysis_id:
+        return None
+    return snapshot
+
+
+def _scan_history_cards() -> list[dict]:
+    if not SCAN_HISTORY_DIR.is_dir():
+        return []
+
+    cards = []
+    for path in SCAN_HISTORY_DIR.glob("*.json"):
+        try:
+            snapshot = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        analysis = snapshot.get("analysis", {})
+        if not isinstance(analysis, dict):
+            continue
+        # Never expose entries whose stored ID disagrees with their filename.
+        analysis_id = snapshot.get("analysis_id")
+        if not isinstance(analysis_id, str) or analysis_id != path.stem:
+            continue
+        findings = snapshot.get("findings", [])
+        completed_at = snapshot.get("created_at_utc") or snapshot.get("saved_at_utc")
+        cards.append({
+            "analysis_id": analysis_id,
+            "saved_at_utc": snapshot.get("saved_at_utc"),
+            "completed_at_utc": completed_at,
+            "completed_at_local": display_awst_timestamp(completed_at),
+            "time_caption": "Completed" if snapshot.get("completed_at_source", "CAPTURED" if snapshot.get("created_at_utc") else "LEGACY_SAVED_TIMESTAMP") == "CAPTURED" else "Saved (legacy)",
+            "analysis_type": analysis.get("analysis_type") or analysis.get("scan_type") or "UNKNOWN",
+            "provider": analysis.get("proposal_provider") or analysis.get("provider") or "UNKNOWN",
+            "target": analysis.get("target") or analysis.get("application_name") or analysis.get("source_file") or "Not available",
+            "authentication_mode": analysis.get("authentication_mode") or "—",
+            "finding_count": len(findings) if isinstance(findings, list) else 0,
+            "has_report": _saved_analysis_path(snapshot.get("analysis_id", path.stem)).is_file(),
+        })
+
+    cards.sort(key=lambda item: item.get("completed_at_utc") or "", reverse=True)
+    return cards
+
+
+def _restore_scan_snapshot(snapshot: dict) -> str:
+    """Make a persisted scan the active analysis without rerunning the scanner."""
+    global LATEST_ANALYSIS_ID
+
+    analysis_id = str(snapshot.get("analysis_id") or "").strip()
+    analysis = snapshot.get("analysis")
+    if not analysis_id or not isinstance(analysis, dict):
+        abort(404)
+
+    FINDINGS.clear()
+    FINDING_METADATA.clear()
+    EVIDENCE_BY_FINDING.clear()
+    REVIEW_BY_FINDING.clear()
+
+    for raw_finding in snapshot.get("findings", []):
+        if not isinstance(raw_finding, dict):
+            continue
+        try:
+            finding = Finding.from_dict(raw_finding)
+        except (KeyError, TypeError, ValueError):
+            continue
+        FINDINGS[finding.finding_id] = finding
+
+    raw_metadata = snapshot.get("finding_metadata", {})
+    if isinstance(raw_metadata, dict):
+        for finding_id in FINDINGS:
+            metadata = raw_metadata.get(finding_id, {})
+            FINDING_METADATA[finding_id] = dict(metadata) if isinstance(metadata, dict) else {}
+            FINDING_METADATA[finding_id].setdefault("analysis_id", analysis_id)
+
+    raw_evidence = snapshot.get("evidence_by_finding", {})
+    if isinstance(raw_evidence, dict):
+        for finding_id, evidence in raw_evidence.items():
+            if finding_id in FINDINGS and isinstance(evidence, dict):
+                EVIDENCE_BY_FINDING[finding_id] = evidence
+
+    raw_reviews = snapshot.get("review_by_finding", {})
+    for finding_id in FINDINGS:
+        review = raw_reviews.get(finding_id, {}) if isinstance(raw_reviews, dict) else {}
+        REVIEW_BY_FINDING[finding_id] = {
+            "final_severity": review.get("final_severity", "") if isinstance(review, dict) else "",
+            "reviewer_comment": review.get("reviewer_comment", "") if isinstance(review, dict) else "",
+            "human_decision": review.get("human_decision") if isinstance(review, dict) else None,
+        }
+
+    ANALYSES[analysis_id] = analysis
+    LATEST_ANALYSIS_ID = analysis_id
+    return analysis_id
+
+
+@app.route("/scan-history")
+def scan_history():
+    return render_template(
+        "scan_history.html",
+        scans=_scan_history_cards(),
+        archive_token=SCAN_HISTORY_ARCHIVE_TOKEN,
+        archived=request.args.get("archived", ""),
+        active_page="scan_history",
+    )
+
+
+@app.route("/scan-history/<analysis_id>/open")
+def open_scan_history(analysis_id):
+    snapshot = _load_scan_snapshot(analysis_id)
+    if snapshot is None:
+        abort(404)
+    restored_analysis_id = _restore_scan_snapshot(snapshot)
+    return redirect(url_for("analysis_results", analysis_id=restored_analysis_id))
+
+
+@app.route("/scan-history/<analysis_id>/report")
+def open_scan_history_report(analysis_id):
+    """Restore a scan before generating a report that was not separately saved."""
+    snapshot = _load_scan_snapshot(analysis_id)
+    if snapshot is None:
+        abort(404)
+    restored_id = _restore_scan_snapshot(snapshot)
+    return redirect(url_for("analysis_report", analysis_id=restored_id))
+
+
+@app.route("/scan-history/<analysis_id>/archive", methods=["POST"])
+def archive_scan_history(analysis_id):
+    """Move one scan and its saved report to recoverable local trash.
+
+    This action does not rerun discovery, modify findings or touch Oracle
+    implementation files. It requires a POST and a process-local CSRF token.
+    """
+    global LATEST_ANALYSIS_ID
+    _safe_analysis_id(analysis_id)
+    supplied_token = request.form.get("archive_token", "")
+    if not hmac.compare_digest(str(supplied_token), SCAN_HISTORY_ARCHIVE_TOKEN):
+        abort(403)
+
+    try:
+        archived = archive_saved_scan(
+            analysis_id=analysis_id,
+            scan_history_dir=SCAN_HISTORY_DIR,
+            saved_analyses_dir=SAVED_ANALYSES_DIR,
+        )
+    except ValueError:
+        abort(400)
+    except OSError:
+        app.logger.exception("Could not archive scan %s", analysis_id)
+        abort(500)
+    if not archived:
+        abort(404)
+
+    # An archived analysis must not silently return to History when a reviewer
+    # updates an open detail page. Keep unrelated active scans untouched.
+    ANALYSES.pop(analysis_id, None)
+    ANALYSIS_SESSIONS.pop(analysis_id, None)
+    if LATEST_ANALYSIS_ID == analysis_id:
+        LATEST_ANALYSIS_ID = None
+    for finding_id, metadata in list(FINDING_METADATA.items()):
+        if metadata.get("analysis_id") == analysis_id:
+            FINDINGS.pop(finding_id, None)
+            FINDING_METADATA.pop(finding_id, None)
+            EVIDENCE_BY_FINDING.pop(finding_id, None)
+            REVIEW_BY_FINDING.pop(finding_id, None)
+
+    return redirect(url_for("scan_history", archived=analysis_id), code=303)
 
 
 # ======================================================================
@@ -1997,10 +2368,7 @@ def _build_analysis_report(analysis_id: str) -> dict:
 
 
 def _saved_analysis_path(analysis_id: str) -> Path:
-    safe_id = "".join(ch for ch in analysis_id if ch.isalnum() or ch in {"-", "_"})
-    if not safe_id or safe_id != analysis_id:
-        abort(400)
-    return SAVED_ANALYSES_DIR / f"{safe_id}.json"
+    return SAVED_ANALYSES_DIR / f"{_safe_analysis_id(analysis_id)}.json"
 
 
 def _load_saved_analysis(analysis_id: str) -> dict | None:
@@ -2153,6 +2521,10 @@ def export_report(analysis_id, format_name):
 
 if __name__ == "__main__":
 
+    # Background analysis jobs are kept in this process's memory. The Werkzeug
+    # development reloader would restart the process and discard active jobs.
+    # Keep debug tracebacks, but disable automatic process restarts.
     app.run(
-        debug=True
+        debug=True,
+        use_reloader=False,
     )

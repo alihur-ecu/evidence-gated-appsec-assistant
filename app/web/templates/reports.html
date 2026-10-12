@@ -6,7 +6,7 @@
 {% block content %}
 <div class="report-page">
     <section class="report-hero">
-        <div><span class="analysis-provider-badge">REPORT STORE</span><h1>Saved Analyses</h1><p class="muted">Saved scans remain available when a new static or dynamic analysis is started.</p></div>
+        <div><span class="analysis-provider-badge">REPORT STORE</span><h1>Saved Analyses</h1><p class="muted">Saved report snapshots remain available independently from Scan History.</p></div>
         <a class="action-link-button" href="{{ url_for('home') }}">+ New Analysis</a>
     </section>
     {% if saved_analyses %}
@@ -22,7 +22,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <div class="analysis-empty-state"><strong>No analyses have been saved yet.</strong><p>Run an analysis, review its findings, open the report preview and choose <strong>Save Analysis</strong>.</p></div>
+    <div class="analysis-empty-state"><strong>No reports have been saved yet.</strong><p>Run an analysis, review its findings, open the report preview and choose <strong>Save Analysis</strong>. Completed scans themselves are stored automatically under <strong>Scan History</strong>.</p></div>
     {% endif %}
 </div>
 {% endblock %}

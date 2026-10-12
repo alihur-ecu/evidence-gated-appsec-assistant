@@ -39,7 +39,9 @@ Architecture principle:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+import hashlib
+import json
 from typing import Any
 
 from app.dynamic_analysis.discovery import (
@@ -109,6 +111,13 @@ class DynamicContextBuildResult:
     truncated: bool
     truncation_reason: str | None
 
+    # Digests, not raw URLs/request contents. Enable cross-run comparison
+    # without persisting authentication/session material.
+    selected_manifest: list[dict[str, Any]] = field(default_factory=list)
+    excluded_manifest: list[dict[str, Any]] = field(default_factory=list)
+    selected_content_sha256: str = ""
+    selected_surface_sha256: str = ""
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "contexts": [
@@ -134,6 +143,10 @@ class DynamicContextBuildResult:
                     self.truncated,
                 "truncation_reason":
                     self.truncation_reason,
+                "selected_manifest": self.selected_manifest,
+                "excluded_manifest": self.excluded_manifest,
+                "selected_content_sha256": self.selected_content_sha256,
+                "selected_surface_sha256": self.selected_surface_sha256,
             },
         }
 
@@ -265,8 +278,28 @@ class DynamicContextBuilder:
             - contexts_selected,
         )
 
+        # Each candidate has a deterministic, non-reversible signature.
+        # Separate surface identity from full observed content, since an
+        # application may return different response excerpts on each run.
+        selected_manifest = [
+            _context_manifest_entry(context)
+            for context in selected_contexts
+        ]
+        excluded_manifest = [
+            _context_manifest_entry(context)
+            for context in candidate_contexts[len(selected_contexts):]
+        ]
+
         return DynamicContextBuildResult(
             contexts=selected_contexts,
+            selected_manifest=selected_manifest,
+            excluded_manifest=excluded_manifest,
+            selected_content_sha256=_digest_json([
+                item["content_sha256"] for item in selected_manifest
+            ]),
+            selected_surface_sha256=_digest_json(sorted(
+                item["surface_sha256"] for item in selected_manifest
+            )),
             endpoints_discovered=len(
                 discovery.endpoints
             ),
@@ -721,3 +754,37 @@ def _render_context_text(
         lines
     )
 
+
+
+def _digest_json(value: Any) -> str:
+    """Stable JSON SHA-256 for comparison, without retaining input values."""
+    canonical = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _context_manifest_entry(context: DynamicContext) -> dict[str, Any]:
+    """Record identity and content fingerprints; never expose raw requests."""
+    surface = {
+        "context_type": context.context_type,
+        "endpoint_url": context.endpoint_url,
+        "method": context.method,
+        "parameters": [
+            {
+                "name": parameter.get("name"),
+                "location": parameter.get("location"),
+                "input_type": parameter.get("input_type"),
+            }
+            for parameter in context.parameters
+        ],
+    }
+    return {
+        "context_id": context.context_id,
+        "context_type": context.context_type,
+        "surface_sha256": _digest_json(surface),
+        "content_sha256": hashlib.sha256(
+            context.context_text.encode("utf-8")
+        ).hexdigest(),
+    }

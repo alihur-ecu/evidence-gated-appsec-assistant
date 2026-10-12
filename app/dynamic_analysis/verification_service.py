@@ -94,6 +94,7 @@ class DynamicVerificationService:
         input_factory: InjectionProbeInputFactory | None = None,
         probe: InjectionDifferentialProbe | None = None,
         verifier: InjectionDifferentialVerifier | None = None,
+        saved_candidates: tuple[ProbeCandidate, ...] | None = None,
     ) -> None:
         self.session = session or requests.Session()
 
@@ -124,6 +125,10 @@ class DynamicVerificationService:
             or InjectionDifferentialVerifier()
         )
 
+        # None: preserve existing live-discovery behaviour for direct callers.
+        # Tuple: use the original scan candidates, without a second discovery.
+        self.saved_candidates = saved_candidates
+
     def verify(
         self,
         finding: Finding,
@@ -132,17 +137,14 @@ class DynamicVerificationService:
 
         self._validate_finding(finding)
 
-        target = build_dynamic_target(
-            finding.endpoint
-        )
-
-        discovery_result = self.discovery.discover(
-            target
-        )
-
-        candidates = self.candidate_builder.build(
-            discovery_result
-        )
+        if self.saved_candidates is None:
+            target = build_dynamic_target(finding.endpoint)
+            discovery_result = self.discovery.discover(target)
+            candidates = self.candidate_builder.build(discovery_result)
+        else:
+            # The caller has already matched the original discovery snapshot.
+            # Never silently fall back to a different, newly crawled candidate.
+            candidates = self.saved_candidates
 
         candidate = self._resolve_candidate(
             finding,

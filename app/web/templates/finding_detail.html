@@ -166,7 +166,7 @@ Finding Proposed
                 </span>
 
                 <strong>
-                    {{ finding.parameter }}
+                    {{ finding.parameter or "Not identified" }}
                 </strong>
 
             </div>
@@ -298,8 +298,8 @@ Finding Proposed
             <article class="panel llm-panel" id="ai-proposal">
                 <div class="panel-header">
                     <div>
-                        <h3>LLM Proposed Finding</h3>
-                        <p>Candidate only — not proof.</p>
+                        <h3>{% if finding.proposal_source == 'STATIC_SOURCE_PATTERN' %}Source-Pattern Proposed Finding{% else %}LLM Proposed Finding{% endif %}</h3>
+                        <p>Candidate only — not proof. Source-pattern proposals are not LLM outputs.</p>
                     </div>
                     <span class="status proposed">{{ finding.llm_status }}</span>
                 </div>
@@ -314,6 +314,16 @@ Finding Proposed
 
                 <div class="analysis-box">{{ finding.reason }}</div>
 
+                {% if finding.proposal_quality_notes %}
+                <div role="note" style="margin-top:12px; border:1px solid #826332; border-radius:8px; padding:12px 14px; color:#e5bc75; line-height:1.5; font-size:13px;">
+                    <strong>Proposal context to review</strong>
+                    {% for note in finding.proposal_quality_notes %}
+                    <p style="margin:6px 0 0;">{{ note }}</p>
+                    {% endfor %}
+                    <p style="margin:6px 0 0;">This does not change the verifier or the finding's evidence status.</p>
+                </div>
+                {% endif %}
+
                 <div class="proposal-facts">
                     <div class="proposal-fact">
                         <span>Endpoint</span>
@@ -321,19 +331,19 @@ Finding Proposed
                     </div>
                     <div class="proposal-fact">
                         <span>Parameter</span>
-                        <strong>{{ finding.parameter }}</strong>
+                        <strong>{{ finding.parameter or "Not identified" }}</strong>
                     </div>
                     <div class="proposal-fact">
                         <span>Method</span>
                         <strong>{{ finding.method }}</strong>
                     </div>
                     <div class="proposal-fact llm-owned">
-                        <span>LLM Proposed CWE</span>
+                        <span>{% if finding.proposal_source == 'STATIC_SOURCE_PATTERN' %}Source-Pattern Proposed CWE{% else %}LLM Proposed CWE{% endif %}</span>
                         <strong>{{ finding.proposed_cwe }}</strong>
                         <small>Proposal — not reviewer input</small>
                     </div>
                     <div class="proposal-fact llm-owned">
-                        <span>LLM Suggested Severity</span>
+                        <span>{% if finding.proposal_source == 'STATIC_SOURCE_PATTERN' %}Pattern Suggested Severity{% else %}LLM Suggested Severity{% endif %}</span>
                         <strong>{{ finding.suggested_severity }}</strong>
                         <small>Suggestion — not final severity</small>
                     </div>
@@ -377,15 +387,25 @@ Finding Proposed
                     <div class="verification-ready-icon">✓</div>
                     <div>
                         <span class="eyebrow">STATIC ORACLE READY</span>
-                        <h4>Verify this source-code proposal</h4>
+                        <h4>Collect independent source observations</h4>
                         <p>
-                            The Static Oracle uses the source context already retained by the static analysis.
-                            No runtime URL is required. Independent source observations are shown to the human
-                            reviewer and the Oracle does not make the final human decision.
+                            The Static Oracle inspects retained source code without running the target.
+                            SQL construction may support a deterministic source result; XSS source observations
+                            remain NEEDS_HUMAN unless a complete source-to-sink flow is established.
+                            It never makes the final human decision.
                         </p>
                     </div>
                     <button id="runVerificationButton" class="verification-action">Collect Static Oracle Evidence</button>
                     <p id="verificationMessage" class="verification-message"></p>
+                    {% elif finding.verification_readiness in ["CANDIDATE_NOT_DISCOVERED", "CANDIDATE_AMBIGUOUS", "AUTH_SESSION_MISSING"] %}
+                    <div class="verification-ready-icon muted-icon">!</div>
+                    <div>
+                        <span class="eyebrow">ORACLE CONTEXT UNAVAILABLE</span>
+                        <h4>Independent verification cannot run for this proposal</h4>
+                        <p>{{ finding.verification_reason }}</p>
+                        <p>No runtime test was executed and the finding remains unverified.</p>
+                    </div>
+                    <button disabled class="verification-action disabled-action">Verification unavailable</button>
                     {% elif finding.verification_readiness == "CONTEXT_REQUIRED" %}
                     <div class="verification-ready-icon muted-icon">!</div>
                     <div>

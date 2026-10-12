@@ -136,7 +136,7 @@ def test_static_sql_injection_routes_to_static_source_verifier():
     )
 
 
-def test_xss_is_preserved_but_unsupported_until_a_real_capability_exists():
+def test_xss_static_source_observation_capability_is_available():
 
     finding = _finding(
         finding_type=
@@ -166,18 +166,15 @@ def test_xss_is_preserved_but_unsupported_until_a_real_capability_exists():
 
     assert (
         route.readiness
-        is VerificationReadiness.UNSUPPORTED
+        is VerificationReadiness.READY
     )
 
-    assert route.can_verify is False
+    assert route.can_verify is True
+
+    assert route.capability_id == "STATIC_XSS_SOURCE_OBSERVATION"
 
     assert (
-        route.capability_id
-        is None
-    )
-
-    assert (
-        "proposal is preserved"
+        "capability is ready"
         in route.reason.lower()
     )
 

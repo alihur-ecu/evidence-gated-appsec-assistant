@@ -144,9 +144,13 @@ def run_static_proposal_pipeline(
             "of proposal dictionaries."
         )
 
-    aggregation = ProposalAggregator().aggregate(
-        raw_proposals
-    )
+    # Keep independently source-grounded *proposals* separate from the LLM
+    # in provenance and execution metrics. Neither source can mark PROVED.
+    source_pattern_proposals = result.get("source_pattern_proposals", [])
+    if not isinstance(source_pattern_proposals, list):
+        source_pattern_proposals = []
+    combined = [*raw_proposals, *source_pattern_proposals]
+    aggregation = ProposalAggregator().aggregate(combined)
 
     result["findings"] = (
         aggregation.findings
@@ -187,6 +191,12 @@ def run_static_proposal_pipeline(
                     field_value
                 )
 
+        for field_name in ("model", "temperature", "max_output_tokens"):
+            if field_name in proposer_execution_report:
+                llm_execution[field_name] = deepcopy(
+                    proposer_execution_report[field_name]
+                )
+
         failed_chunks = proposer_execution_report.get(
             "failed_chunks"
         )
@@ -209,6 +219,13 @@ def run_static_proposal_pipeline(
             aggregation.duplicates_merged,
     }
 
+    # Add new provenance metrics separately; keep the existing aggregation
+    # dictionary's schema unchanged for backward compatibility.
+    result["proposal_origins"] = {
+        "llm_proposals_received": len(raw_proposals),
+        "source_pattern_proposals_received": len(source_pattern_proposals),
+    }
+
     result["proposal_provider"] = (
         selected_proposer.provider_name
     )
@@ -220,7 +237,9 @@ def run_static_proposal_pipeline(
     if selected_proposer.provider_name == "NONE":
         proposal_status = "DISABLED"
     elif attempted > 0 and failed > 0 and succeeded == 0:
-        proposal_status = "FAILED"
+        # The local LLM failed on every chunk, but independently labelled
+        # static source-pattern candidates may still be shown honestly.
+        proposal_status = "PARTIAL" if source_pattern_proposals else "FAILED"
     elif failed > 0:
         proposal_status = "PARTIAL"
     else:

@@ -245,12 +245,41 @@ class DynamicAnalysisPipeline:
         report = getattr(self.proposer, "last_execution_report", None)
         if not isinstance(report, dict):
             return None
-        return {
+        output = {
             "chunks_attempted": int(report.get("chunks_attempted", 0) or 0),
             "chunks_succeeded": int(report.get("chunks_succeeded", 0) or 0),
             "chunks_failed": int(report.get("chunks_failed", 0) or 0),
-            "failed_chunks": list(report.get("failed_chunks", []) or []),
+            # Only preserve non-secret failure diagnostics in the snapshot.
+            "failed_chunks": [
+                {
+                    "context_id": item.get("context_id"),
+                    "status_code": item.get("status_code"),
+                    "error_type": item.get("error_type"),
+                }
+                for item in (report.get("failed_chunks", []) or [])
+                if isinstance(item, dict)
+            ],
         }
+        for key in ("model", "temperature", "max_output_tokens"):
+            if key in report:
+                output[key] = report[key]
+        if "contexts_planned" in report:
+            planned = int(report["contexts_planned"] or 0)
+            output["contexts_planned"] = planned
+            output["contexts_unattempted"] = max(
+                0, planned - output["chunks_attempted"]
+            )
+        if "context_outcomes" in report:
+            output["context_outcomes"] = [
+                {
+                    "context_id": item.get("context_id"),
+                    "outcome": item.get("outcome"),
+                    "finding_count": int(item.get("finding_count", 0) or 0),
+                }
+                for item in (report.get("context_outcomes", []) or [])
+                if isinstance(item, dict)
+            ]
+        return output
 
     @staticmethod
     def _proposal_status(

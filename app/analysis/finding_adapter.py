@@ -66,10 +66,57 @@ TYPE_MAP = {
     "OPEN REDIRECT": FindingType.OPEN_REDIRECT,
     "CWE-601": FindingType.OPEN_REDIRECT,
 
-    # File Inclusion
+    # File Inclusion (do not infer this from CWE-94: that CWE is code injection)
     "FILE_INCLUSION": FindingType.FILE_INCLUSION,
+    "FILE INCLUSION": FindingType.FILE_INCLUSION,
     "LOCAL_FILE_INCLUSION": FindingType.FILE_INCLUSION,
+    "LOCAL FILE INCLUSION": FindingType.FILE_INCLUSION,
     "REMOTE_FILE_INCLUSION": FindingType.FILE_INCLUSION,
+    "REMOTE FILE INCLUSION": FindingType.FILE_INCLUSION,
+    "LFI": FindingType.FILE_INCLUSION,
+    "RFI": FindingType.FILE_INCLUSION,
+
+    # Unrestricted File Upload / CWE-434
+    "FILE_UPLOAD": FindingType.FILE_UPLOAD,
+    "FILE UPLOAD": FindingType.FILE_UPLOAD,
+    "UNRESTRICTED_FILE_UPLOAD": FindingType.FILE_UPLOAD,
+    "UNRESTRICTED FILE UPLOAD": FindingType.FILE_UPLOAD,
+    "UNRESTRICTED_UPLOAD_OF_FILE_WITH_DANGEROUS_TYPE": FindingType.FILE_UPLOAD,
+    "CWE-434": FindingType.FILE_UPLOAD,
+
+    # Cross-Site Request Forgery / CWE-352
+    "CSRF": FindingType.CSRF,
+    "CROSS_SITE_REQUEST_FORGERY": FindingType.CSRF,
+    "CROSS-SITE REQUEST FORGERY": FindingType.CSRF,
+    "CROSS SITE REQUEST FORGERY": FindingType.CSRF,
+    "CWE-352": FindingType.CSRF,
+
+    # Excessive authentication attempts / CWE-307 (not generic authentication)
+    "AUTHENTICATION_RATE_LIMITING": FindingType.AUTHENTICATION_RATE_LIMITING,
+    "BRUTE_FORCE": FindingType.AUTHENTICATION_RATE_LIMITING,
+    "BRUTE FORCE": FindingType.AUTHENTICATION_RATE_LIMITING,
+    "INSUFFICIENT_LOGIN_ATTEMPT_LIMITING": FindingType.AUTHENTICATION_RATE_LIMITING,
+    "IMPROPER_RESTRICTION_OF_EXCESSIVE_AUTHENTICATION_ATTEMPTS": FindingType.AUTHENTICATION_RATE_LIMITING,
+    "CWE-307": FindingType.AUTHENTICATION_RATE_LIMITING,
+
+    # Code Injection / CWE-94; do not confuse with CWE-78 or File Inclusion
+    "CODE_INJECTION": FindingType.CODE_INJECTION,
+    "CODE INJECTION": FindingType.CODE_INJECTION,
+    "CWE-94": FindingType.CODE_INJECTION,
+
+    # Sensitive information exposure / CWE-200
+    "INFORMATION_EXPOSURE": FindingType.INFORMATION_EXPOSURE,
+    "INFORMATION EXPOSURE": FindingType.INFORMATION_EXPOSURE,
+    "SENSITIVE_INFORMATION_EXPOSURE": FindingType.INFORMATION_EXPOSURE,
+    "EXPOSURE_OF_SENSITIVE_INFORMATION_TO_AN_UNAUTHORIZED_ACTOR": FindingType.INFORMATION_EXPOSURE,
+    "CWE-200": FindingType.INFORMATION_EXPOSURE,
+
+    # Direct Request / Forced Browsing / CWE-425
+    "FORCED_BROWSING": FindingType.FORCED_BROWSING,
+    "FORCED BROWSING": FindingType.FORCED_BROWSING,
+    "DIRECT_REQUEST": FindingType.FORCED_BROWSING,
+    "DIRECT REQUEST": FindingType.FORCED_BROWSING,
+    "CWE-425": FindingType.FORCED_BROWSING,
 
     # Insecure Deserialization
     "INSECURE_DESERIALIZATION":
@@ -380,6 +427,10 @@ def adapt_analysis_result(
             "chunk_end_line":
                 _normalise_line_number(proposal.get("chunk_end_line")),
 
+            "source_scope": proposal.get("source_scope")
+                if proposal.get("proposal_source") == "STATIC_SOURCE_PATTERN"
+                else None,
+
             "scan_type":
                 finding.scan_type.value,
 
@@ -390,10 +441,9 @@ def adapt_analysis_result(
                 suggested_severity or "Not assessed",
 
             "proposal_source":
-                analysis_result.get(
-                    "provider",
-                    "UNKNOWN",
-                ),
+                _clean_optional_string(proposal.get("proposal_source"))
+                or analysis_result.get("proposal_provider")
+                or analysis_result.get("provider", "UNKNOWN"),
 
             "context_source":
                 analysis_result.get(
