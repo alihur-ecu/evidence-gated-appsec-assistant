@@ -1,0 +1,636 @@
+{% extends "base.html" %}
+
+{% block title %}
+Start Analysis | Evidence-Gated AppSec Finding Assistant
+{% endblock %}
+
+{% block body_class %}home-page{% endblock %}
+
+{% block page_shell %}
+
+<main class="analysis-launch" id="analysisLaunch">
+
+    <header class="launch-header">
+
+        <a
+            href="{{ url_for('home') }}"
+            class="launch-brand"
+            aria-label="Evidence-Gated home"
+        >
+            <span class="launch-brand-mark">EG</span>
+
+            <span class="launch-brand-copy">
+                <strong>Evidence-Gated</strong>
+                <small>AppSec Finding Assistant</small>
+            </span>
+        </a>
+
+        <span class="launch-status">
+            <span class="launch-status-dot"></span>
+            Ready for authorised testing
+        </span>
+
+    </header>
+
+
+    <section class="launch-content">
+
+        <div class="launch-intro">
+
+            <span class="launch-eyebrow">
+                NEW SECURITY ANALYSIS
+            </span>
+
+            <h1>
+                Choose your analysis mode
+            </h1>
+
+            <p>
+                Select how you want to build the initial security context.
+                Complete the required information before starting the analysis.
+            </p>
+
+        </div>
+
+
+        <div class="analysis-mode-grid" id="analysisModeGrid">
+
+            <!-- ==================================================
+                 STATIC ANALYSIS
+                 ================================================== -->
+
+            <article
+                class="analysis-mode-card"
+                id="staticModeCard"
+                data-analysis-mode="static"
+                tabindex="0"
+                role="button"
+                aria-pressed="false"
+            >
+
+                <div class="mode-card-top">
+
+                    <span class="mode-number">
+                        01
+                    </span>
+
+                    <span
+                        class="mode-state"
+                        data-mode-status
+                    >
+                        SELECT
+                    </span>
+
+                </div>
+
+                <div class="mode-identity">
+                    <div class="mode-icon" aria-hidden="true">
+                        &lt;/&gt;
+                    </div>
+                    <span class="mode-type">
+                        STATIC ANALYSIS
+                    </span>
+                </div>
+
+                <h2>
+                    Analyse application source
+                </h2>
+
+                <p>
+                    Provide authorised source code so a static context
+                    collector can prepare structured application context
+                    for the LLM proposer.
+                </p>
+
+                <div class="mode-input-summary">
+                    <span>REQUIRES</span>
+                    <strong>Source file or project archive</strong>
+                    <small>Supported source file and authorisation confirmation</small>
+                </div>
+
+                <span class="mode-select-hint">
+                    Select Static Analysis
+                    <span aria-hidden="true">→</span>
+                </span>
+
+            </article>
+
+
+            <!-- ==================================================
+                 DYNAMIC ANALYSIS
+                 ================================================== -->
+
+            <article
+                class="analysis-mode-card"
+                id="dynamicModeCard"
+                data-analysis-mode="dynamic"
+                tabindex="0"
+                role="button"
+                aria-pressed="false"
+            >
+
+                <div class="mode-card-top">
+
+                    <span class="mode-number">
+                        02
+                    </span>
+
+                    <span
+                        class="mode-state"
+                        data-mode-status
+                    >
+                        SELECT
+                    </span>
+
+                </div>
+
+                <div class="mode-identity">
+                    <div class="mode-icon" aria-hidden="true">
+                        ↗
+                    </div>
+                    <span class="mode-type">
+                        DYNAMIC ANALYSIS
+                    </span>
+                </div>
+
+                <h2>
+                    Analyse a running application
+                </h2>
+
+                <p>
+                    Provide an authorised target so runtime context can be
+                    collected before candidate findings are proposed.
+                </p>
+
+                <div class="mode-input-summary">
+                    <span>REQUIRES</span>
+                    <strong>Target URL + analysis scope</strong>
+                    <small>Running application and authorisation confirmation</small>
+                </div>
+
+                <span class="mode-select-hint">
+                    Select Dynamic Analysis
+                    <span aria-hidden="true">→</span>
+                </span>
+
+            </article>
+
+        </div>
+
+
+        <!-- ======================================================
+             CONFIGURATION PANEL
+             Hidden until one mode is selected.
+             ====================================================== -->
+
+        <section
+            class="analysis-config-panel"
+            id="analysisConfigPanel"
+            hidden
+        >
+
+            <div class="config-panel-heading">
+
+                <div>
+                    <span class="launch-eyebrow">
+                        ANALYSIS CONFIGURATION
+                    </span>
+
+                    <h2 id="configPanelTitle">
+                        Complete analysis details
+                    </h2>
+
+                    <p id="configPanelDescription">
+                        Required information must be completed before the
+                        analysis can start.
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    class="change-mode-button"
+                    id="changeModeButton"
+                >
+                    Change mode
+                </button>
+
+            </div>
+
+
+            <section class="llm-provider-config" aria-labelledby="llmProviderHeading">
+                <div class="config-field config-field-wide">
+                    <label for="llmProvider" id="llmProviderHeading">
+                        LLM Provider
+                        <span>Required</span>
+                    </label>
+                    <select id="llmProvider" name="llm_provider">
+                        <option value="">Choose the proposal model</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="gemini">Gemini</option>
+                        <option value="lmstudio">LM Studio (Local)</option>
+                    </select>
+                    <small class="field-help">
+                        The selected LLM proposes candidate findings only. Independent
+                        evidence verification and human review remain separate stages.
+                    </small>
+                </div>
+                <div class="config-field config-field-wide" id="llmApiKeyField" hidden>
+                    <label for="llmApiKey">
+                        API key for selected provider
+                        <span>Optional if configured on server</span>
+                    </label>
+                    <input id="llmApiKey" type="password" autocomplete="new-password"
+                           spellcheck="false" placeholder="Enter your API key for this analysis">
+                    <small class="field-help">Used for this analysis only. Leave blank to use the server configuration.
+                        Do not share or commit your API key.</small>
+                </div>
+            </section>
+
+
+            <!-- STATIC CONFIGURATION -->
+
+            <div
+                class="mode-config"
+                id="staticConfig"
+                hidden
+            >
+
+                <div class="config-grid">
+
+                    <div class="config-field config-field-wide">
+
+                        <label for="staticSourceFile">
+                            Application Source
+                            <span>Required</span>
+                        </label>
+
+                        <label
+                            for="staticSourceFile"
+                            class="file-drop-zone"
+                            id="staticDropZone"
+                        >
+
+                            <input
+                                id="staticSourceFile"
+                                type="file"
+                                accept=".zip,.py,.php,.js,.ts,.html,.htm,.jsx,.tsx,.java,.cs,.go,.rb,.c,.cpp,.vue,.txt"
+                            >
+
+                            <span class="file-drop-icon" aria-hidden="true">
+                                ↑
+                            </span>
+
+                            <strong>
+                                Choose source file or project archive
+                            </strong>
+
+                            <small id="staticFileName">
+                                ZIP, PY, PHP, JS, TS, HTML, JAVA, TXT and other supported source files.
+                            </small>
+
+                        </label>
+
+                        <small class="field-help">
+                            Upload one authorised source file or a ZIP archive containing the application source.
+                        </small>
+
+                    </div>
+
+                </div>
+
+
+                <section
+                    class="selected-source-card"
+                    id="selectedSourceCard"
+                    hidden
+                    aria-live="polite"
+                >
+
+                    <div class="selected-source-heading">
+
+                        <div class="selected-source-icon" aria-hidden="true">
+                            &lt;/&gt;
+                        </div>
+
+                        <div>
+                            <span class="selected-source-label">
+                                SELECTED SOURCE
+                            </span>
+
+                            <strong id="selectedSourceName">
+                                —
+                            </strong>
+
+                            <small id="selectedSourceDescription">
+                                —
+                            </small>
+                        </div>
+
+                    </div>
+
+                    <div class="selected-source-meta">
+
+                        <div class="selected-source-application">
+                            <label for="selectedApplicationName">APPLICATION</label>
+                            <input
+                                id="selectedApplicationName"
+                                type="text"
+                                value=""
+                                placeholder="Application name"
+                                autocomplete="off"
+                            >
+                        </div>
+
+                        <div>
+                            <span>FILE TYPE</span>
+                            <strong id="selectedFileType">—</strong>
+                        </div>
+
+                        <div>
+                            <span>EXTENSION</span>
+                            <strong id="selectedFileExtension">—</strong>
+                        </div>
+
+                        <div>
+                            <span>CONTEXT SOURCE</span>
+                            <strong id="selectedContextSource">—</strong>
+                        </div>
+
+                    </div>
+
+                    <p class="selected-source-ready">
+                        Source identified and ready for static context collection.
+                    </p>
+
+                </section>
+
+
+                <label class="authorisation-check">
+
+                    <input
+                        id="staticAuthorised"
+                        type="checkbox"
+                    >
+
+                    <span>
+                        I confirm that I am authorised to analyse this
+                        application source.
+                    </span>
+
+                </label>
+
+            </div>
+
+
+            <!-- DYNAMIC CONFIGURATION -->
+
+            <div
+                class="mode-config"
+                id="dynamicConfig"
+                hidden
+            >
+
+                <div class="dynamic-access-heading">
+                    <span class="launch-eyebrow">DYNAMIC ACCESS</span>
+                    <h3>Choose how the application should be analysed</h3>
+                    <p>
+                        Public coverage does not require credentials. Authenticated
+                        coverage extends discovery into authorised areas protected by
+                        a conventional username/password login form.
+                    </p>
+                </div>
+
+                <div class="dynamic-access-grid" id="dynamicAccessGrid">
+
+                    <button
+                        type="button"
+                        class="dynamic-access-card selected"
+                        id="unauthenticatedAccessCard"
+                        data-auth-mode="NONE"
+                        aria-pressed="true"
+                    >
+                        <span class="access-card-number">01</span>
+                        <span class="access-card-state" data-auth-status>SELECTED</span>
+                        <span class="access-card-icon" aria-hidden="true">◎</span>
+                        <strong>Unauthenticated Scan</strong>
+                        <small>Public attack surface</small>
+                        <p>
+                            Analyse pages, forms and endpoints accessible without
+                            credentials.
+                        </p>
+                        <span class="access-card-requirement">No credentials required</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="dynamic-access-card"
+                        id="authenticatedAccessCard"
+                        data-auth-mode="FORM"
+                        aria-pressed="false"
+                    >
+                        <span class="access-card-number">02</span>
+                        <span class="access-card-state" data-auth-status>SELECT</span>
+                        <span class="access-card-icon" aria-hidden="true">↗</span>
+                        <strong>Authenticated Scan</strong>
+                        <small>Extended authorised surface</small>
+                        <p>
+                            Establish an authorised HTML form session before discovery
+                            and reuse it for deterministic verification.
+                        </p>
+                        <span class="access-card-requirement">Username + password</span>
+                    </button>
+
+                </div>
+
+                <div class="config-grid dynamic-target-grid">
+
+                    <div class="config-field config-field-wide">
+                        <label for="dynamicTargetUrl">
+                            Target URL
+                            <span>Required</span>
+                        </label>
+
+                        <input
+                            id="dynamicTargetUrl"
+                            type="url"
+                            placeholder="https://application.example"
+                            autocomplete="off"
+                        >
+
+                        <small class="field-help">
+                            Enter the authorised running application to be analysed.
+                        </small>
+                    </div>
+
+                    <div class="config-field">
+                        <label for="dynamicScope">
+                            Analysis Scope
+                            <span>Required</span>
+                        </label>
+
+                        <input
+                            id="dynamicScope"
+                            type="text"
+                            placeholder="e.g. Public web application"
+                            autocomplete="off"
+                        >
+                    </div>
+
+                    <div class="config-field">
+                        <label>Context Source</label>
+                        <div class="config-readonly">
+                            Runtime HTTP context
+                        </div>
+                    </div>
+
+                </div>
+
+                <section
+                    class="authentication-fields"
+                    id="authenticationFields"
+                    hidden
+                    aria-live="polite"
+                >
+                    <div class="authentication-heading">
+                        <div>
+                            <span>AUTHENTICATION CONTEXT</span>
+                            <strong>Authorised HTML form login</strong>
+                        </div>
+                        <small>
+                            Credentials are used only to establish the in-memory scan
+                            session and are not written to findings, evidence or reports.
+                        </small>
+                    </div>
+
+                    <div class="config-grid">
+                        <div class="config-field">
+                            <label for="dynamicUsername">
+                                Username or Email
+                                <span>Required</span>
+                            </label>
+                            <input
+                                id="dynamicUsername"
+                                type="text"
+                                autocomplete="username"
+                                placeholder="Authorised test account"
+                            >
+                        </div>
+
+                        <div class="config-field">
+                            <label for="dynamicPassword">
+                                Password
+                                <span>Required</span>
+                            </label>
+                            <input
+                                id="dynamicPassword"
+                                type="password"
+                                autocomplete="current-password"
+                                placeholder="Password"
+                            >
+                        </div>
+                    </div>
+
+                    <p class="authentication-note">
+                        Current MVP: conventional server-rendered HTML login forms.
+                        SSO, MFA, bearer tokens and imported sessions remain separate
+                        authentication adapters.
+                    </p>
+                </section>
+
+                <label class="authorisation-check">
+                    <input
+                        id="dynamicAuthorised"
+                        type="checkbox"
+                    >
+                    <span>
+                        I confirm that I am authorised to test this target and, when
+                        supplied, to use these credentials for this security analysis.
+                    </span>
+                </label>
+
+            </div>
+
+
+            <section class="analysis-progress-panel" id="analysisProgressPanel" hidden aria-live="polite">
+                <div class="analysis-progress-heading">
+                    <div>
+                        <span class="eyebrow">ANALYSIS PROGRESS</span>
+                        <strong id="analysisProgressStage">Preparing analysis</strong>
+                    </div>
+                    <strong class="analysis-progress-percent" id="analysisProgressPercent">0%</strong>
+                </div>
+                <div class="analysis-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="analysisProgressTrack">
+                    <div class="analysis-progress-fill" id="analysisProgressFill"></div>
+                </div>
+                <div class="analysis-progress-detail">
+                    <span id="analysisProgressMessage">Waiting for the analysis to start...</span>
+                    <span id="analysisProgressCounter"></span>
+                </div>
+            </section>
+
+            <div class="config-actions">
+
+                <div class="config-validation">
+
+                    <span
+                        class="validation-dot"
+                        id="analysisValidationDot"
+                    ></span>
+
+                    <span id="analysisValidationMessage">
+                        Complete all required fields to continue.
+                    </span>
+
+                </div>
+
+                <button
+                    type="button"
+                    class="start-analysis-button"
+                    id="startAnalysisButton"
+                    disabled
+                >
+                    Start Analysis
+                    <span aria-hidden="true">→</span>
+                </button>
+
+            </div>
+
+        </section>
+
+
+        <div class="launch-principle">
+
+            <span class="principle-label">
+                EVIDENCE-GATED WORKFLOW
+            </span>
+
+            <div class="principle-flow">
+
+                <div>
+                    <strong>LLM</strong>
+                    <small>Proposes</small>
+                </div>
+
+                <span class="principle-arrow">→</span>
+
+                <div>
+                    <strong>Evidence</strong>
+                    <small>Verifies</small>
+                </div>
+
+                <span class="principle-arrow">→</span>
+
+                <div>
+                    <strong>Human</strong>
+                    <small>Decides</small>
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+</main>
+
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Reports | Evidence-Gated AppSec Finding Assistant{% endblock %}
+{% block current_focus %}Saved Analyses{% endblock %}
+{% block target_selector %}<strong>Saved Analyses</strong>{% endblock %}
+{% block top_status %}Reports{% endblock %}
+{% block content %}
+<div class="report-page">
+    <section class="report-hero">
+        <div><span class="analysis-provider-badge">REPORT STORE</span><h1>Saved Analyses</h1><p class="muted">Saved report snapshots remain available independently from Scan History.</p></div>
+        <a class="action-link-button" href="{{ url_for('home') }}">+ New Analysis</a>
+    </section>
+    {% if saved_analyses %}
+    <div class="saved-analysis-grid">
+        {% for item in saved_analyses %}
+        <article class="saved-analysis-card">
+            <div class="saved-analysis-card-head"><strong>{{ item.analysis_id }}</strong><span class="status completed">SAVED</span></div>
+            <h3>{{ item.target }}</h3>
+            <div class="saved-analysis-meta"><span>{{ item.analysis_type }}</span><span>{{ item.provider }}</span><span>{{ item.finding_count }} finding(s)</span>{% if item.authentication_mode != '—' %}<span>{{ item.authentication_mode }}</span>{% endif %}</div>
+            <small>{{ item.saved_at_utc or "Saved" }}</small>
+            <a class="action-link-button" href="{{ url_for('saved_report', analysis_id=item.analysis_id) }}">Open Report</a>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="analysis-empty-state"><strong>No reports have been saved yet.</strong><p>Run an analysis, review its findings, open the report preview and choose <strong>Save Analysis</strong>. Completed scans themselves are stored automatically under <strong>Scan History</strong>.</p></div>
+    {% endif %}
+</div>
+{% endblock %}

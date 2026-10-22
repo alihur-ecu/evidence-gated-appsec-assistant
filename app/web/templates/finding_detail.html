@@ -1,0 +1,1080 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+Finding Details | Evidence-Gated AppSec Finding Assistant
+{% endblock %}
+
+
+{% block current_focus %}
+{{ finding.finding_type }}
+{% endblock %}
+
+
+{% block target_selector %}
+
+<strong>
+    {{ finding.target }}
+</strong>
+
+{% endblock %}
+
+
+{% block top_status %}
+
+{% if finding.verification_status == "COMPLETED" %}
+
+Verification Complete
+
+{% else %}
+
+Finding Proposed
+
+{% endif %}
+
+{% endblock %}
+
+{% block topbar_actions %}
+<a class="topbar-action-button" href="{{ url_for('home') }}">+ New Analysis</a>
+{% endblock %}
+
+{% block content %}
+
+
+<div class="page-layout">
+
+
+    <!-- ==========================================================
+         MAIN COLUMN
+         ========================================================== -->
+
+    <section class="main-column">
+
+
+        <div class="breadcrumb">
+
+            <a
+                href="{{ url_for('findings_list') }}"
+                style="
+                    color: inherit;
+                    text-decoration: none;
+                "
+            >
+                Findings
+            </a>
+
+            / Finding Details
+
+        </div>
+
+
+        <!-- ======================================================
+             TITLE
+             ====================================================== -->
+
+        <section class="finding-title-row">
+
+
+            <div>
+
+                <h1>
+                    {{ finding.finding_type }}
+                </h1>
+
+            </div>
+
+
+            <div class="finding-meta">
+
+
+                <span class="finding-id">
+
+                    {{ finding.finding_id }}
+
+                </span>
+
+
+                <span class="risk-pill">
+
+                    Suggested:
+                    {{ finding.suggested_severity }}
+
+                </span>
+
+
+            </div>
+
+
+        </section>
+
+
+        <!-- ======================================================
+             PRELOADED PROPOSAL WARNING
+             ====================================================== -->
+
+        {% if finding.proposal_source == "PRELOADED" %}
+
+        <div
+            style="
+                margin-top: 18px;
+                padding: 11px 14px;
+                border: 1px solid #735d2c;
+                border-radius: 8px;
+                background: #231f13;
+                color: #cdbd83;
+                font-size: 12px;
+                line-height: 1.5;
+            "
+        >
+
+            <strong>Development note:</strong>
+
+            this candidate Finding is currently preloaded so the
+            downstream verification pipeline can be developed and
+            tested. The live LLM proposer is not connected to this
+            web application yet.
+
+        </div>
+
+        {% endif %}
+
+
+        <!-- ======================================================
+             SUMMARY
+             ====================================================== -->
+
+        <section class="summary-grid">
+
+
+            <div class="summary-card">
+
+                <span>
+                    Endpoint
+                </span>
+
+                <strong>
+                    {{ finding.endpoint }}
+                </strong>
+
+            </div>
+
+
+            <div class="summary-card">
+
+                <span>
+                    Parameter
+                </span>
+
+                <strong>
+                    {{ finding.parameter or "Not identified" }}
+                </strong>
+
+            </div>
+
+
+            <div class="summary-card">
+
+                <span>
+                    Proposed CWE
+                </span>
+
+                <strong>
+                    {{ finding.proposed_cwe }}
+                </strong>
+
+            </div>
+
+
+            <div class="summary-card">
+
+                <span>
+                    Gate Status
+                </span>
+
+                <strong>
+                    {{ finding.evidence_gate_result }}
+                </strong>
+
+            </div>
+
+
+        </section>
+
+
+        <!-- ======================================================
+             WORKFLOW NAVIGATION
+             Completed/available stages are navigable for inspection.
+             ====================================================== -->
+
+        <nav class="workflow workflow-nav" aria-label="Finding workflow">
+
+            <a class="workflow-step active" href="#ai-proposal">
+                <div class="workflow-circle">1</div>
+                <strong>LLM Proposal</strong>
+                <span>{{ finding.llm_status }}</span>
+            </a>
+
+            <div
+                class="
+                    workflow-line
+                    {% if finding.verification_status == 'COMPLETED' %}
+                    active-line
+                    {% endif %}
+                "
+            ></div>
+
+            {% if finding.verification_status == "COMPLETED" %}
+            <a class="workflow-step active" href="#verification">
+            {% else %}
+            <div class="workflow-step">
+            {% endif %}
+
+                <div class="workflow-circle">2</div>
+                <strong>Verification</strong>
+                <span>{{ finding.verification_status }}</span>
+
+            {% if finding.verification_status == "COMPLETED" %}
+            </a>
+            {% else %}
+            </div>
+            {% endif %}
+
+            <div
+                class="
+                    workflow-line
+                    {% if finding.verification_status == 'COMPLETED' %}
+                    active-line
+                    {% endif %}
+                "
+            ></div>
+
+            {% if finding.verification_status == "COMPLETED" %}
+            <a class="workflow-step active" href="#human-review">
+            {% else %}
+            <div class="workflow-step">
+            {% endif %}
+
+                <div class="workflow-circle">3</div>
+                <strong>Human Review</strong>
+
+                <span>
+                    {% if finding.human_decision %}
+                    {{ finding.human_decision }}
+                    {% elif finding.verification_status == "COMPLETED" %}
+                    READY
+                    {% else %}
+                    PENDING
+                    {% endif %}
+                </span>
+
+            {% if finding.verification_status == "COMPLETED" %}
+            </a>
+            {% else %}
+            </div>
+            {% endif %}
+
+            <div class="workflow-line"></div>
+
+            <div class="workflow-step">
+                <div class="workflow-circle">4</div>
+                <strong>Report</strong>
+                <span>NOT GENERATED</span>
+            </div>
+
+        </nav>
+
+
+        <!-- ======================================================
+             LLM + EVIDENCE
+             ====================================================== -->
+
+        <section class="analysis-grid">
+
+
+            <!-- ==================================================
+                 PROPOSAL
+                 ================================================== -->
+
+            <article class="panel llm-panel" id="ai-proposal">
+                <div class="panel-header">
+                    <div>
+                        <h3>{% if finding.proposal_source == 'STATIC_SOURCE_PATTERN' %}Source-Pattern Proposed Finding{% else %}LLM Proposed Finding{% endif %}</h3>
+                        <p>Candidate only — not proof. Source-pattern proposals are not LLM outputs.</p>
+                    </div>
+                    <span class="status proposed">{{ finding.llm_status }}</span>
+                </div>
+
+                <div class="proposal-heading">
+                    <div>
+                        <span class="eyebrow">POTENTIAL VULNERABILITY</span>
+                        <h4>{{ finding.finding_type }}</h4>
+                    </div>
+                    <span class="proposal-source-badge">{{ finding.proposal_source }}</span>
+                </div>
+
+                <div class="analysis-box">{{ finding.reason }}</div>
+
+                {% if finding.proposal_quality_notes %}
+                <div role="note" style="margin-top:12px; border:1px solid #826332; border-radius:8px; padding:12px 14px; color:#e5bc75; line-height:1.5; font-size:13px;">
+                    <strong>Proposal context to review</strong>
+                    {% for note in finding.proposal_quality_notes %}
+                    <p style="margin:6px 0 0;">{{ note }}</p>
+                    {% endfor %}
+                    <p style="margin:6px 0 0;">This does not change the verifier or the finding's evidence status.</p>
+                </div>
+                {% endif %}
+
+                <div class="proposal-facts">
+                    <div class="proposal-fact">
+                        <span>Endpoint</span>
+                        <strong>{{ finding.endpoint }}</strong>
+                    </div>
+                    <div class="proposal-fact">
+                        <span>Parameter</span>
+                        <strong>{{ finding.parameter or "Not identified" }}</strong>
+                    </div>
+                    <div class="proposal-fact">
+                        <span>Method</span>
+                        <strong>{{ finding.method }}</strong>
+                    </div>
+                    <div class="proposal-fact llm-owned">
+                        <span>{% if finding.proposal_source == 'STATIC_SOURCE_PATTERN' %}Source-Pattern Proposed CWE{% else %}LLM Proposed CWE{% endif %}</span>
+                        <strong>{{ finding.proposed_cwe }}</strong>
+                        <small>Proposal — not reviewer input</small>
+                    </div>
+                    <div class="proposal-fact llm-owned">
+                        <span>{% if finding.proposal_source == 'STATIC_SOURCE_PATTERN' %}Pattern Suggested Severity{% else %}LLM Suggested Severity{% endif %}</span>
+                        <strong>{{ finding.suggested_severity }}</strong>
+                        <small>Suggestion — not final severity</small>
+                    </div>
+                    <div class="proposal-fact">
+                        <span>Target</span>
+                        <strong>{{ finding.target }}</strong>
+                    </div>
+                </div>
+            </article>
+
+            <!-- ==================================================
+                 VERIFICATION EVIDENCE
+                 ================================================== -->
+
+            <article class="panel evidence-panel" id="verification">
+                <div class="panel-header">
+                    <div>
+                        <h3>Independent Verification</h3>
+                        <p>Evidence is collected independently from the LLM proposal.</p>
+                    </div>
+                    <span class="status pending-status">{{ finding.verification_status }}</span>
+                </div>
+
+                {% if finding.verification_status != "COMPLETED" %}
+                <div class="verification-ready">
+                    {% if finding.runtime_verification_supported %}
+                    <div class="verification-ready-icon">✓</div>
+                    <div>
+                        <span class="eyebrow">ORACLE READY</span>
+                        <h4>Verify this LLM proposal</h4>
+                        <p>
+                            The Runtime Oracle uses the authorised target and session already captured
+                            by the dynamic analysis. No target URL needs to be entered again. Its evidence
+                            is shown here for the human reviewer; it does not make the final human decision.
+                        </p>
+                    </div>
+
+                    <button id="runVerificationButton" class="verification-action">Collect Oracle Evidence</button>
+                    <p id="verificationMessage" class="verification-message"></p>
+                    {% elif finding.static_verification_supported %}
+                    <div class="verification-ready-icon">✓</div>
+                    <div>
+                        <span class="eyebrow">STATIC ORACLE READY</span>
+                        <h4>Collect independent source observations</h4>
+                        <p>
+                            The Static Oracle inspects retained source code without running the target.
+                            SQL construction may support a deterministic source result; XSS source observations
+                            remain NEEDS_HUMAN unless a complete source-to-sink flow is established.
+                            It never makes the final human decision.
+                        </p>
+                    </div>
+                    <button id="runVerificationButton" class="verification-action">Collect Static Oracle Evidence</button>
+                    <p id="verificationMessage" class="verification-message"></p>
+                    {% elif finding.verification_readiness in ["CANDIDATE_NOT_DISCOVERED", "CANDIDATE_AMBIGUOUS", "AUTH_SESSION_MISSING"] %}
+                    <div class="verification-ready-icon muted-icon">!</div>
+                    <div>
+                        <span class="eyebrow">ORACLE CONTEXT UNAVAILABLE</span>
+                        <h4>Independent verification cannot run for this proposal</h4>
+                        <p>{{ finding.verification_reason }}</p>
+                        <p>No runtime test was executed and the finding remains unverified.</p>
+                    </div>
+                    <button disabled class="verification-action disabled-action">Verification unavailable</button>
+                    {% elif finding.verification_readiness == "CONTEXT_REQUIRED" %}
+                    <div class="verification-ready-icon muted-icon">!</div>
+                    <div>
+                        <span class="eyebrow">ORACLE CONTEXT REQUIRED</span>
+                        <h4>Additional observed context is required before verification</h4>
+                        <p>
+                            A verifier exists for this finding type, but it cannot run because the proposal is missing:
+                            <strong>{{ finding.verification_missing_fields | join(', ') }}</strong>.
+                            No evidence will be fabricated.
+                        </p>
+                    </div>
+                    <button disabled class="verification-action disabled-action">Verification unavailable</button>
+                    {% elif finding.static_verification_pending %}
+                    <div class="verification-ready-icon muted-icon">!</div>
+                    <div>
+                        <span class="eyebrow">STATIC ORACLE</span>
+                        <h4>Additional source context is required</h4>
+                        <p>The proposal is preserved, but deterministic source verification cannot run without the required retained source context.</p>
+                    </div>
+                    <button disabled class="verification-action disabled-action">Static verification unavailable</button>
+                    {% else %}
+                    <div class="verification-ready-icon muted-icon">!</div>
+                    <div>
+                        <span class="eyebrow">NOT AVAILABLE</span>
+                        <h4>Verification capability is not implemented for this finding type</h4>
+                        <p>No evidence will be fabricated for an unsupported finding.</p>
+                    </div>
+                    <button disabled class="verification-action disabled-action">Verification unavailable</button>
+                    {% endif %}
+
+                </div>
+
+                {% else %}
+                <div class="verification-verdict">
+                    <div>
+                        <span class="eyebrow">VERIFICATION RESULT</span>
+                        <strong class="verification-result">{{ finding.evidence_gate_result }}</strong>
+                    </div>
+                    <p>
+                        {% if finding.evidence_gate_result == "PROVED" %}
+                        Independent evidence supports the proposed finding.
+                        {% elif finding.evidence_gate_result == "REFUTED" %}
+                        Independent evidence does not support the proposed finding.
+                        {% else %}
+                        The collected evidence is inconclusive and requires human interpretation.
+                        {% endif %}
+                    </p>
+                </div>
+
+                <div class="evidence-section-heading">
+                    <div>
+                        <span class="eyebrow">WHAT WAS TESTED</span>
+                        <h4>{{ finding.evidence | length }} independent evidence check{% if finding.evidence | length != 1 %}s{% endif %}</h4>
+                    </div>
+                </div>
+
+                <div class="verified-finding-context">
+                    <span class="eyebrow">FINDING BEING VERIFIED</span>
+                    <div class="verified-finding-main">
+                        <strong>{{ finding.finding_type }}</strong>
+                        <span>{{ finding.method }} {{ finding.endpoint }}</span>
+                        <span>Parameter: <strong>{{ finding.parameter }}</strong></span>
+                    </div>
+                    <p>
+                        {% if finding.evidence_source == "STATIC" %}
+                        The Static Oracle is checking retained source context for deterministic observations relevant to the proposed finding.
+                        {% else %}
+                        The Runtime Oracle is testing whether controlled changes to this parameter produce behaviour consistent with the proposed finding.
+                        {% endif %}
+                    </p>
+                </div>
+
+                <div class="evidence-cards">
+                    {% for test in finding.evidence %}
+                    <article class="evidence-card{% if finding.evidence_source == 'RUNTIME' and test.database_error_detected %} oracle-signal{% endif %}">
+                        <div class="evidence-card-top">
+                            <span class="evidence-number">EVIDENCE {{ '%02d'|format(loop.index) }}</span>
+                            <span class="evidence-observed {% if finding.evidence_source == 'STATIC' and test.result != 'OBSERVED' %}not-established{% endif %}">{% if finding.evidence_source == "STATIC" %}{{ test.result }}{% else %}OBSERVED{% endif %}</span>
+                        </div>
+                        <h4>{{ test.name }}</h4>
+                        {% if finding.evidence_source == "STATIC" %}
+                        <p class="evidence-purpose">{{ test.baseline }}</p>
+                        <div class="evidence-result-row">
+                            <span>Deterministic observation</span>
+                            <strong>{{ test.result }}</strong>
+                            <small>{{ test.observed }}</small>
+                        </div>
+                        <p class="evidence-metric-help">This observation comes from retained source context, not from the LLM proposal and not from a runtime HTTP request.</p>
+                        {% else %}
+                        <p class="evidence-purpose">
+                            {% if loop.index == 1 %}
+                            Establishes normal application behaviour before SQL conditions are introduced.
+                            {% elif loop.index == 2 %}
+                            Checks whether a controlled TRUE SQL condition changes the returned result set.
+                            {% else %}
+                            Checks whether a controlled FALSE SQL condition changes the returned result set.
+                            {% endif %}
+                        </p>
+                        <div class="evidence-result-row">
+                            <span>Application result</span>
+                            <strong>{{ test.result_count if test.result_count is not none else 'N/A' }}</strong>
+                            <small>matching record{% if test.result_count != 1 %}s{% endif %} returned</small>
+                        </div>
+                        <div class="evidence-mini-grid">
+                            <div title="HTTP response status returned by the target application.">
+                                <span>HTTP response</span>
+                                <strong>{{ test.status_code if test.status_code is not none else 'N/A' }}{% if test.status_code == 200 %} OK{% elif test.status_code == 404 %} NOT FOUND{% endif %}</strong>
+                            </div>
+                            <div title="Whether the response contained a recognisable database error message. A NO result does not by itself rule out SQL Injection.">
+                                <span>Database error</span>
+                                <strong>{{ 'DETECTED' if test.database_error_detected else 'NOT DETECTED' }}</strong>
+                            </div>
+                        </div>
+                        <p class="evidence-metric-help">HTTP shows how the target responded. Database error reports whether an explicit DB error signature was observed.</p>
+                        <div class="evidence-mini-grid">
+                            <div title="Exact value sent for the candidate parameter during this observation.">
+                                <span>Payload / test value</span>
+                                <strong>{{ test.payload if test.payload else 'Not retained' }}</strong>
+                            </div>
+                            <div title="Deterministic signal classified independently from the LLM proposal.">
+                                <span>Oracle signal</span>
+                                <strong>{{ test.error_family if test.error_family else 'NONE' }}</strong>
+                            </div>
+                        </div>
+                        {% if test.database_error_detected %}<span class="evidence-signal-badge">DETERMINISTIC SIGNAL OBSERVED{% if test.error_signature %} · {{ test.error_signature }}{% endif %}</span>{% endif %}
+                        {% endif %}
+                    </article>
+                    {% endfor %}
+                </div>
+
+                <div class="verification-conclusion">
+                    <span class="eyebrow">VERIFICATION CONCLUSION</span>
+                    <h4>
+                        {% if finding.evidence_gate_result == "PROVED" %}
+                        Independent evidence supports the proposed finding
+                        {% elif finding.evidence_gate_result == "REFUTED" %}
+                        Independent evidence does not support the proposed finding
+                        {% else %}
+                        Evidence is insufficient for a deterministic conclusion
+                        {% endif %}
+                    </h4>
+                    <p>{{ finding.evidence_summary }}</p>
+                </div>
+
+                <details class="technical-evidence">
+                    <summary>
+                        <strong>View technical evidence</strong>
+                        <span>{% if finding.evidence_source == "STATIC" %}Source observations and retained code excerpts{% else %}Requests, payloads and raw response excerpts{% endif %}</span>
+                    </summary>
+                    <div class="technical-evidence-content">
+                        {% for test in finding.evidence %}
+                        <article class="technical-test">
+                            <header><div><small>{{ test.display_id or test.test_id }}</small><strong>{{ test.name }}</strong></div></header>
+                            {% if finding.evidence_source == "STATIC" %}
+                            <div class="technical-field"><span>Deterministic check</span><pre>{{ test.request }}</pre></div>
+                            <details class="raw-response static-source-details">
+                                <summary>View retained source excerpt</summary>
+                                {% if test.source_lines %}
+                                <div class="source-code-evidence">
+                                    {% for line in test.source_lines %}
+                                    <div class="source-code-line {% if line.highlight %}source-code-line-highlight{% endif %}">
+                                        <span class="source-line-number">{{ line.line_number }}</span>
+                                        <code>{{ line.text }}</code>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                <p class="source-highlight-note">Highlighted lines are the deterministic source signals used by this Oracle observation.</p>
+                                {% else %}
+                                <pre>{{ test.response }}</pre>
+                                {% endif %}
+                            </details>
+                            {% else %}
+                            <div class="technical-field{% if test.database_error_detected %} oracle-signal-field{% endif %}"><span>Payload / test value</span><pre>{{ test.payload if test.payload else 'Not retained by evidence collector' }}</pre></div>
+                            <div class="technical-field"><span>Request</span><pre>{{ test.request }}</pre></div>
+                            <details class="raw-response"><summary>View raw response excerpt</summary><pre>{{ test.response }}</pre></details>
+                            {% endif %}
+                        </article>
+                        {% endfor %}
+                        {% if finding.run_id %}<div class="evidence-run-meta"><span>Run ID</span><strong>{{ finding.run_id }}</strong></div>{% endif %}
+                    </div>
+                </details>
+
+                <div class="verification-footer">
+                    <button id="runVerificationButton" class="verification-action secondary-verification-action">Run Verification Again</button>
+                    <p id="verificationMessage" class="verification-message"></p>
+                </div>
+                {% endif %}
+            </article>
+
+        </section>
+
+        <!-- ======================================================
+             EVIDENCE GATE + REVIEWER ASSESSMENT
+             ====================================================== -->
+
+        <section class="decision-grid">
+            <article class="panel gate-panel">
+                <div class="panel-header">
+                    <div>
+                        <h3>Evidence Gate</h3>
+                        <p>Deterministic classification based only on independent evidence.</p>
+                    </div>
+                    <span class="status pending-status">{{ finding.evidence_gate_result }}</span>
+                </div>
+
+                {% if finding.verification_status == "COMPLETED" %}
+                <div class="gate-explanation">
+                    <span class="eyebrow">GATE INTERPRETATION</span>
+                    <h4>
+                        {% if finding.evidence_gate_result == "PROVED" %}
+                        Evidence threshold satisfied
+                        {% elif finding.evidence_gate_result == "REFUTED" %}
+                        Evidence does not support the proposal
+                        {% else %}
+                        Human interpretation required
+                        {% endif %}
+                    </h4>
+                    <p>
+                        {% if finding.evidence_gate_result == "PROVED" %}
+                        The independent verification produced sufficient deterministic evidence to support the proposed finding.
+                        {% elif finding.evidence_gate_result == "REFUTED" %}
+                        The independent verification did not produce evidence supporting the proposed finding.
+                        {% else %}
+                        The independent verification completed, but the available signals are not sufficient to prove or refute the proposal automatically.
+                        {% endif %}
+                    </p>
+                </div>
+                <details class="gate-signals">
+                    <summary>View technical gate signals</summary>
+                    <div class="gate-signal-grid">
+                        {% if finding.evidence_source == "STATIC" %}
+                        <div><span>Input source observed</span><strong>{{ finding.signals.input_source_observed }}</strong></div>
+                        <div><span>Database sink observed</span><strong>{{ finding.signals.database_sink_observed }}</strong></div>
+                        <div><span>Unsafe query composition</span><strong>{{ finding.signals.unsafe_query_composition_observed }}</strong></div>
+                        <div><span>Parameterized query observed</span><strong>{{ finding.signals.parameterized_query_observed }}</strong></div>
+                        {% else %}
+                        <div><span>Database error observed</span><strong>{{ finding.signals.database_error_detected }}</strong></div>
+                        <div><span>Behaviour changed</span><strong>{{ finding.signals.behaviour_changed }}</strong></div>
+                        <div><span>TRUE/FALSE difference</span><strong>{{ finding.signals.true_false_difference }}</strong></div>
+                        {% endif %}
+                    </div>
+                </details>
+                {% else %}
+                <div class="gate-explanation pending-gate">
+                    <span class="eyebrow">WAITING FOR EVIDENCE</span>
+                    <h4>No gate decision yet</h4>
+                    <p>Independent verification must complete before the Evidence Gate can classify this proposal.</p>
+                </div>
+                {% endif %}
+            </article>
+
+            <article class="panel reviewer-panel">
+                <div class="panel-header">
+                    <div>
+                        <h3>Reviewer Assessment</h3>
+                        <p>Human judgement remains separate from the LLM proposal and Evidence Gate.</p>
+                    </div>
+                    <span class="status review-status">{% if finding.human_decision %}{{ finding.human_decision }}{% else %}NOT REVIEWED{% endif %}</span>
+                </div>
+                <div class="review-comparison">
+                    <section class="review-comparison-card llm-comparison-card">
+                        <span class="review-comparison-label">LLM SUGGESTION</span>
+                        <div class="review-comparison-row"><span>Suggested Severity</span><strong>{{ finding.suggested_severity }}</strong></div>
+                        <div class="review-comparison-row"><span>Proposed CWE</span><strong>{{ finding.proposed_cwe }}</strong></div>
+                        <small>Read-only proposal metadata. It is not the reviewer’s final assessment.</small>
+                    </section>
+                    <section class="review-comparison-card human-comparison-card">
+                        <span class="review-comparison-label">HUMAN ASSESSMENT</span>
+                        <label for="finalSeverity">Final Severity</label>
+                        <select id="finalSeverity">
+                            <option value="" {% if not finding.final_severity %}selected{% endif %}>Not assigned</option>
+                            <option value="LOW" {% if finding.final_severity == "LOW" %}selected{% endif %}>Low</option>
+                            <option value="MEDIUM" {% if finding.final_severity == "MEDIUM" %}selected{% endif %}>Medium</option>
+                            <option value="HIGH" {% if finding.final_severity == "HIGH" %}selected{% endif %}>High</option>
+                            <option value="CRITICAL" {% if finding.final_severity == "CRITICAL" %}selected{% endif %}>Critical</option>
+                        </select>
+                        <small>The reviewer assigns final severity independently after considering the proposal and Oracle evidence.</small>
+                    </section>
+                </div>
+                <p class="storage-note">Review data is currently stored in Flask memory and resets when the development server restarts.</p>
+            </article>
+        </section>
+
+        <!-- ======================================================
+             HUMAN DECISION
+             ====================================================== -->
+
+        <section class="human-review-section" id="human-review">
+
+
+            <div class="review-comment">
+
+
+                <label for="reviewComment">
+
+                    Reviewer Comment
+
+                </label>
+
+
+                <textarea
+                    id="reviewComment"
+                    rows="3"
+                    placeholder="Add reasoning, observations or notes..."
+                >{{ finding.reviewer_comment }}</textarea>
+
+
+                <small
+                    id="reviewSaveStatus"
+                    class="save-status"
+                ></small>
+
+
+            </div>
+
+
+            <div class="decision-info">
+
+
+                <span>
+                    Human Decision
+                </span>
+
+
+                {% if finding.verification_status != "COMPLETED" %}
+
+                <small>
+
+                    A human decision cannot be recorded until
+                    independent verification has completed.
+
+                </small>
+
+                {% else %}
+
+                <small>
+
+                    Verification is complete. The reviewer may now
+                    record an independent decision.
+
+                </small>
+
+                {% endif %}
+
+
+                {% if finding.human_decision %}
+
+                <strong
+                    id="recordedHumanDecision"
+                    style="
+                        display: block;
+                        margin-top: 8px;
+                    "
+                >
+
+                    Recorded decision:
+                    {{ finding.human_decision }}
+
+                </strong>
+
+                {% endif %}
+
+
+            </div>
+
+
+            <div class="decision-buttons">
+
+
+                <button
+                    id="rejectButton"
+                    class="reject-button"
+                    {% if finding.verification_status != "COMPLETED" %}
+                    disabled
+                    {% endif %}
+                >
+
+                    Reject Finding
+
+                </button>
+
+
+                <button
+                    id="reviewButton"
+                    class="review-button"
+                    {% if finding.verification_status != "COMPLETED" %}
+                    disabled
+                    {% endif %}
+                >
+
+                    Needs Further Review
+
+                </button>
+
+
+                <button
+                    id="acceptButton"
+                    class="accept-button"
+                    {% if finding.verification_status != "COMPLETED" %}
+                    disabled
+                    {% endif %}
+                >
+
+                    Accept Finding
+
+                </button>
+
+
+            </div>
+
+
+        </section>
+
+
+    </section>
+
+
+    <!-- ==========================================================
+         RIGHT COLUMN
+         ========================================================== -->
+
+    <aside class="right-column">
+
+
+        <!-- TIMELINE -->
+
+        <article class="side-panel">
+
+
+            <h3>
+                Finding Timeline
+            </h3>
+
+
+            <div class="timeline">
+
+
+                <div class="timeline-item completed">
+
+                    <span class="timeline-dot"></span>
+
+                    <div>
+
+                        <strong>
+                            Finding proposed
+                        </strong>
+
+                        <small>
+
+                            {{ finding.proposal_source }}
+
+                        </small>
+
+                    </div>
+
+                </div>
+
+
+                <div
+                    class="
+                        timeline-item
+                        {% if finding.verification_status == 'COMPLETED' %}
+                        completed
+                        {% endif %}
+                    "
+                >
+
+                    <span class="timeline-dot"></span>
+
+                    <div>
+
+                        <strong>
+                            Evidence verification
+                        </strong>
+
+                        <small>
+
+                            {{ finding.verification_status }}
+
+                        </small>
+
+                    </div>
+
+                </div>
+
+
+                <div
+                    class="
+                        timeline-item
+                        {% if finding.human_decision %}
+                        completed
+                        {% endif %}
+                    "
+                >
+
+                    <span class="timeline-dot"></span>
+
+                    <div>
+
+                        <strong>
+                            Human review
+                        </strong>
+
+                        <small>
+
+                            {% if finding.human_decision %}
+
+                            {{ finding.human_decision }}
+
+                            {% elif finding.verification_status == "COMPLETED" %}
+
+                            Ready for review
+
+                            {% else %}
+
+                            Waiting
+
+                            {% endif %}
+
+                        </small>
+
+                    </div>
+
+                </div>
+
+
+            </div>
+
+
+        </article>
+
+
+        <!-- VERIFICATION SUMMARY -->
+
+        <article class="side-panel">
+
+
+            <h3>
+                Verification Summary
+            </h3>
+
+
+            <div class="related-item">
+
+                <div>
+
+                    <small>
+                        Oracle Status
+                    </small>
+
+                    <strong>
+                        {{ finding.verification_status }}
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <div class="related-item">
+
+                <div>
+
+                    <small>
+                        Evidence Gate
+                    </small>
+
+                    <strong>
+                        {{ finding.evidence_gate_result }}
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <div class="related-item">
+
+                <div>
+
+                    <small>
+                        Verification Tests
+                    </small>
+
+                    <strong>
+                        {{ finding.evidence | length }}
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            {% if finding.run_id %}
+
+            <div class="related-item">
+
+                <div>
+
+                    <small>
+                        Run ID
+                    </small>
+
+                    <strong
+                        style="
+                            font-size: 11px;
+                            word-break: break-all;
+                        "
+                    >
+                        {{ finding.run_id }}
+                    </strong>
+
+                </div>
+
+            </div>
+
+            {% endif %}
+
+
+            {% if finding.evidence_source == "RUNTIME" %}
+
+            <p class="demo-label">
+
+                Real runtime evidence from local DVWA lab
+
+            </p>
+
+            {% endif %}
+
+
+        </article>
+
+
+        <!-- ACTIONS -->
+
+        <article class="side-panel">
+
+
+            <h3>
+                Actions
+            </h3>
+
+
+            {% if finding.analysis_id %}
+
+            <a
+                class="action-link-button"
+                href="{{ url_for('analysis_report', analysis_id=finding.analysis_id) }}"
+            >
+                View Analysis Report
+            </a>
+
+
+            {% else %}
+
+            <button disabled>
+                Report unavailable
+            </button>
+
+            {% endif %}
+
+
+        </article>
+
+
+    </aside>
+
+
+</div>
+
+
+{% endblock %}

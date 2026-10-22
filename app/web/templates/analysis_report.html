@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Analysis Report | Evidence-Gated AppSec Finding Assistant{% endblock %}
+{% block current_focus %}Analysis Report{% endblock %}
+{% block target_selector %}<strong>{{ report.analysis.target or report.analysis.application_name or report.analysis.source_file or "Analysis" }}</strong>{% endblock %}
+{% block top_status %}{{ "Saved Report" if is_saved else "Report Preview" }}{% endblock %}
+{% block topbar_actions %}<a class="topbar-action-button" href="{{ url_for('home') }}">+ New Analysis</a>{% endblock %}
+
+{% block content %}
+<div class="report-page">
+    <div class="breadcrumb">Reports → {{ report.analysis_id }}</div>
+
+    <section class="report-cover">
+        <div>
+            <span class="analysis-provider-badge">APPLICATION SECURITY ASSESSMENT</span>
+            <h1>Evidence-Gated Analysis Report</h1>
+            <p>Consolidated assessment of LLM proposals, independent verification evidence and human review decisions.</p>
+        </div>
+        <div class="report-cover-actions">
+            {% if not is_saved %}<button id="saveAnalysisButton" data-analysis-id="{{ report.analysis_id }}">Save Analysis</button>{% else %}<span class="status completed">SAVED</span>{% endif %}
+            <a class="action-link-button" href="{{ url_for('export_report', analysis_id=report.analysis_id, format_name='csv') }}">Export CSV</a>
+            <a class="action-link-button action-link-button-secondary" href="{{ url_for('export_report', analysis_id=report.analysis_id, format_name='json') }}">Export JSON</a>
+        </div>
+    </section>
+
+    <section class="report-section">
+        <div class="report-section-title"><span>01</span><div><h2>Analysis Overview</h2><p>Scope and execution metadata for this assessment.</p></div></div>
+        <div class="report-overview-grid">
+            <div><span>Analysis ID</span><strong>{{ report.analysis_id }}</strong></div>
+            <div><span>Target / Application</span><strong>{{ report.analysis.target or report.analysis.application_name or report.analysis.source_file or "—" }}</strong></div>
+            <div><span>Scan Type</span><strong>{{ report.analysis.analysis_type or report.analysis.scan_type or "—" }}</strong></div>
+            <div><span>LLM Provider</span><strong>{{ report.analysis.proposal_provider or report.analysis.provider or "—" }}</strong></div>
+            <div><span>Authentication</span><strong>{{ report.analysis.authentication_mode or "—" }}</strong></div>
+            <div><span>Report State</span><strong>{{ "Saved snapshot" if is_saved else "Live preview" }}</strong></div>
+        </div>
+    </section>
+
+    <section class="report-section">
+        <div class="report-section-title"><span>02</span><div><h2>Executive Summary</h2><p>Current verification, risk and human-review posture.</p></div></div>
+        <div class="report-kpi-grid">
+            <div class="report-kpi"><span>Total Findings</span><strong>{{ report.summary.total_findings }}</strong><small>LLM-proposed candidates</small></div>
+            <div class="report-kpi"><span>Proved</span><strong>{{ report.summary.verification.get('PROVED', 0) }}</strong><small>Independently supported</small></div>
+            <div class="report-kpi"><span>Needs Human</span><strong>{{ report.summary.verification.get('NEEDS_HUMAN', 0) }}</strong><small>Requires interpretation</small></div>
+            <div class="report-kpi"><span>Pending</span><strong>{{ report.summary.verification.get('PENDING', 0) }}</strong><small>Verification incomplete</small></div>
+        </div>
+        <div class="report-risk-strip">
+            {% for severity in ['CRITICAL','HIGH','MEDIUM','LOW','UNSET'] %}
+            <div><span>{{ severity }}</span><strong>{{ report.summary.severities.get(severity, 0) }}</strong></div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="report-section">
+        <div class="report-section-title"><span>03</span><div><h2>Findings Register</h2><p>Risk-register view. LLM severity and human final severity remain deliberately separate.</p></div></div>
+        {% if report.findings %}
+        <div class="report-register-wrap">
+            <table class="report-register">
+                <thead><tr><th>ID</th><th>Finding</th><th>Location</th><th>CWE</th><th>LLM Severity</th><th>Oracle</th><th>Final Severity</th><th>Human Decision</th></tr></thead>
+                <tbody>
+                {% for finding in report.findings %}
+                <tr>
+                    <td><a href="#{{ finding.finding_id }}">{{ finding.finding_id }}</a></td>
+                    <td><strong>{{ finding.finding_type }}</strong><small>{{ finding.reason }}</small></td>
+                    <td>
+                        {% if finding.endpoint %}<code>{{ finding.endpoint }}</code>{% if finding.parameter %}<small>Parameter: {{ finding.parameter }}</small>{% endif %}
+                        {% elif finding.source_file and finding.source_file != 'Not available' %}<code>{{ finding.source_file }}</code>{% if finding.line_number %}<small>Line {{ finding.line_number }}</small>{% elif finding.chunk_start_line %}<small>Lines {{ finding.chunk_start_line }}{% if finding.chunk_end_line %}–{{ finding.chunk_end_line }}{% endif %}</small>{% endif %}
+                        {% else %}<span class="muted">Source context retained; precise location unavailable</span>{% endif %}
+                    </td>
+                    <td><strong>{{ finding.proposed_cwe or "—" }}</strong><small>Read-only</small></td>
+                    <td>{{ finding.suggested_severity or "—" }}</td>
+                    <td><span class="status {{ (finding.evidence_gate_result or 'pending')|lower }}">{{ finding.evidence_gate_result or "PENDING" }}</span></td>
+                    <td>{{ finding.final_severity or "NOT ASSIGNED" }}</td>
+                    <td>{{ finding.human_decision or "PENDING" }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<div class="analysis-empty-state"><strong>No findings are available in this report.</strong></div>{% endif %}
+    </section>
+
+    <section class="report-section">
+        <div class="report-section-title"><span>04</span><div><h2>Detailed Findings & Evidence</h2><p>Traceable proposal, source/runtime location, Oracle evidence and reviewer assessment.</p></div></div>
+        {% for finding in report.findings %}
+        <article class="report-finding-card" id="{{ finding.finding_id }}">
+            <div class="report-finding-heading">
+                <div><span>{{ finding.finding_id }}</span><h3>{{ finding.finding_type }}</h3><p>{{ finding.reason }}</p></div>
+                <span class="status {{ (finding.evidence_gate_result or 'pending')|lower }}">{{ finding.evidence_gate_result or "PENDING" }}</span>
+            </div>
+
+            <div class="report-finding-columns">
+                <div class="report-finding-block"><h4>LLM Proposal</h4><dl><dt>CWE</dt><dd>{{ finding.proposed_cwe or "—" }}</dd><dt>Suggested severity</dt><dd>{{ finding.suggested_severity or "—" }}</dd><dt>Status</dt><dd>PROPOSED</dd></dl></div>
+                <div class="report-finding-block"><h4>Location</h4><dl>
+                    {% if finding.endpoint %}<dt>Endpoint</dt><dd>{{ finding.endpoint }}</dd><dt>Parameter</dt><dd>{{ finding.parameter or "Not identified" }}</dd><dt>Method</dt><dd>{{ finding.method or "Not identified" }}</dd>{% endif %}
+                    {% if finding.source_file and finding.source_file != 'Not available' %}<dt>Source file</dt><dd>{{ finding.source_file }}</dd>{% if finding.line_number %}<dt>Line</dt><dd>{{ finding.line_number }}</dd>{% elif finding.chunk_start_line %}<dt>Retained context</dt><dd>Lines {{ finding.chunk_start_line }}{% if finding.chunk_end_line %}–{{ finding.chunk_end_line }}{% endif %}</dd>{% endif %}{% endif %}
+                    {% if not finding.endpoint and (not finding.source_file or finding.source_file == 'Not available') %}<dt>Location</dt><dd>Precise location not available from the proposal.</dd>{% endif %}
+                </dl></div>
+                <div class="report-finding-block"><h4>Human Assessment</h4><dl><dt>Final severity</dt><dd>{{ finding.final_severity or "Not assigned" }}</dd><dt>Decision</dt><dd>{{ finding.human_decision or "Pending" }}</dd><dt>Reviewer comment</dt><dd>{{ finding.reviewer_comment or "No comment recorded" }}</dd></dl></div>
+            </div>
+
+            {% if finding.evidence_summary %}<div class="report-evidence-summary"><strong>Oracle conclusion</strong><p>{{ finding.evidence_summary }}</p></div>{% endif %}
+            {% if finding.evidence %}
+            <details class="report-evidence-details"><summary>Technical evidence · {{ finding.evidence|length }} observation(s)</summary>
+                <div class="report-observation-list">
+                {% for item in finding.evidence %}
+                    <div class="report-observation">
+                        <div class="report-observation-title"><strong>{{ item.display_id or item.test_id }}</strong><span>{{ item.name }}</span><small>Audit ID: {{ item.test_id }}</small></div>
+                        {% if item.payload %}<div><span>Payload / test value</span><code>{{ item.payload }}</code></div>{% endif %}
+                        {% if item.request %}<div><span>Request / source observation</span><pre>{{ item.request }}</pre></div>{% endif %}
+                        {% if item.source_lines %}<div class="report-source-lines"><span>Relevant source</span><pre>{% for line in item.source_lines %}<mark class="{{ 'evidence-highlight' if line.highlight else '' }}">{{ '%4s'|format(line.line_number) }} | {{ line.text }}</mark>
+{% endfor %}</pre></div>{% elif item.response %}<div><span>Observed response / excerpt</span><pre>{{ item.response }}</pre></div>{% endif %}
+                    </div>
+                {% endfor %}
+                </div>
+            </details>
+            {% endif %}
+        </article>
+        {% endfor %}
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const saveButton = document.getElementById('saveAnalysisButton');
+if (saveButton) {
+    saveButton.addEventListener('click', async () => {
+        const original = saveButton.textContent;
+        saveButton.disabled = true; saveButton.textContent = 'Saving...';
+        try {
+            const response = await fetch(`/analysis/${saveButton.dataset.analysisId}/save`, {method: 'POST', headers: {'Content-Type': 'application/json'}});
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Unable to save analysis');
+            saveButton.textContent = 'Saved';
+            window.setTimeout(() => window.location.reload(), 350);
+        } catch (error) {
+            saveButton.disabled = false; saveButton.textContent = original; alert(error.message);
+        }
+    });
+}
+</script>
+{% endblock %}

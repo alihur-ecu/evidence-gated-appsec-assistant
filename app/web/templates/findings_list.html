@@ -1,0 +1,451 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+Findings | Evidence-Gated AppSec Finding Assistant
+{% endblock %}
+
+
+{% block current_focus %}
+Finding Review
+{% endblock %}
+
+
+{% block target_selector %}
+
+<strong>
+    All Targets
+</strong>
+
+{% endblock %}
+
+
+{% block top_status %}
+Findings Overview
+{% endblock %}
+
+
+{% block content %}
+
+
+<div class="page-layout">
+
+
+    <!-- ==========================================================
+         MAIN FINDINGS CONTENT
+         ========================================================== -->
+
+    <section class="main-column">
+
+
+        <!-- ======================================================
+             BREADCRUMB
+             ====================================================== -->
+
+        <div class="breadcrumb">
+
+            Findings
+
+        </div>
+
+
+        <!-- ======================================================
+             PAGE TITLE
+             ====================================================== -->
+
+        <section class="finding-title-row">
+
+
+            <div>
+
+                <h1>
+                    Findings
+                </h1>
+
+                <p class="muted">
+
+                    Review vulnerabilities proposed by the LLM
+                    and track their verification and human-review status.
+
+                </p>
+
+            </div>
+
+
+            <div class="finding-meta">
+
+                <span class="finding-id">
+
+                    {{ findings | length }} Findings
+
+                </span>
+
+            </div>
+
+
+        </section>
+
+
+        <!-- ======================================================
+             FINDINGS TABLE
+             ====================================================== -->
+
+        <article class="panel">
+
+
+            <div class="panel-header">
+
+
+                <div>
+
+                    <h3>
+                        Proposed Findings
+                    </h3>
+
+                    <p>
+
+                        LLM-generated findings remain proposed until
+                        independent verification and human review are completed.
+
+                    </p>
+
+                </div>
+
+
+                <span class="status proposed">
+
+                    CURRENT ANALYSIS
+
+                </span>
+
+
+            </div>
+
+
+            <!-- ==================================================
+                 TABLE
+                 ================================================== -->
+
+            <div style="overflow-x: auto;">
+
+
+                <table
+                    style="
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 18px;
+                    "
+                >
+
+
+                    <!-- ==========================================
+                         TABLE HEADER
+                         ========================================== -->
+
+                    <thead>
+
+
+                        <tr
+                            style="
+                                text-align: left;
+                                border-bottom: 1px solid #264760;
+                            "
+                        >
+
+
+                            <th
+                                style="
+                                    padding: 14px 12px;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: #6eb6ec;
+                                "
+                            >
+                                ID
+                            </th>
+
+
+                            <th
+                                style="
+                                    padding: 14px 12px;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: #6eb6ec;
+                                "
+                            >
+                                Finding
+                            </th>
+
+
+                            <th
+                                style="
+                                    padding: 14px 12px;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: #6eb6ec;
+                                "
+                            >
+                                Target
+                            </th>
+
+
+                            <th
+                                style="
+                                    padding: 14px 12px;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: #6eb6ec;
+                                "
+                            >
+                                CWE
+                            </th>
+
+
+                            <th
+                                style="
+                                    padding: 14px 12px;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: #6eb6ec;
+                                "
+                            >
+                                LLM Status
+                            </th>
+
+
+                            <th
+                                style="
+                                    padding: 14px 12px;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: #6eb6ec;
+                                "
+                            >
+                                Verification
+                            </th>
+
+
+                            <th
+                                style="
+                                    padding: 14px 12px;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: #6eb6ec;
+                                "
+                            >
+                                Human Decision
+                            </th>
+
+
+                            <th
+                                style="
+                                    padding: 14px 12px;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: #6eb6ec;
+                                "
+                            >
+                                Suggested Severity
+                            </th>
+
+
+                        </tr>
+
+
+                    </thead>
+
+
+                    <!-- ==========================================
+                         TABLE BODY
+                         ========================================== -->
+
+                    <tbody>
+
+
+                        {% for finding in findings %}
+
+
+                        <tr
+                            style="
+                                border-bottom: 1px solid #19364c;
+                            "
+                        >
+
+
+                            <!-- Finding ID -->
+
+                            <td
+                                style="
+                                    padding: 18px 12px;
+                                "
+                            >
+
+                                <a
+                                    href="{{ url_for('finding_detail', finding_id=finding.finding_id) }}"
+                                    style="
+                                        color: #70c7ff;
+                                        font-weight: 700;
+                                        text-decoration: none;
+                                    "
+                                >
+                                    {{ finding.finding_id }}
+                                </a>
+
+                            </td>
+
+
+                            <!-- Finding Type -->
+
+                            <td
+                                style="
+                                    padding: 18px 12px;
+                                    color: #ffffff;
+                                    font-weight: 600;
+                                "
+                            >
+
+                                {{ finding.finding_type }}
+
+                            </td>
+
+
+                            <!-- Target -->
+
+                            <td
+                                style="
+                                    padding: 18px 12px;
+                                    color: #93b6d1;
+                                "
+                            >
+
+                                {{ finding.target }}
+
+                            </td>
+
+
+                            <!-- CWE -->
+
+                            <td
+                                style="
+                                    padding: 18px 12px;
+                                    color: #ffffff;
+                                "
+                            >
+
+                                {{ finding.proposed_cwe }}
+
+                            </td>
+
+
+                            <!-- LLM Status -->
+
+                            <td
+                                style="
+                                    padding: 18px 12px;
+                                "
+                            >
+
+                                <span class="status proposed">
+
+                                    {{ finding.llm_status }}
+
+                                </span>
+
+                            </td>
+
+
+                            <!-- Verification -->
+
+                            <td
+                                style="
+                                    padding: 18px 12px;
+                                "
+                            >
+
+                                <span class="status pending-status">
+
+                                    {{ finding.verification_status }}
+
+                                </span>
+
+                            </td>
+
+
+                            <!-- Human Decision -->
+
+                            <td
+                                style="
+                                    padding: 18px 12px;
+                                    color: #93b6d1;
+                                "
+                            >
+
+
+                                {% if finding.human_decision %}
+
+                                    {{ finding.human_decision }}
+
+                                {% else %}
+
+                                    NOT REVIEWED
+
+                                {% endif %}
+
+
+                            </td>
+
+
+                            <!-- Suggested Severity -->
+
+                            <td
+                                style="
+                                    padding: 18px 12px;
+                                    color: #ffffff;
+                                "
+                            >
+
+                                {{ finding.suggested_severity }}
+
+                            </td>
+
+
+                        </tr>
+
+
+                        {% endfor %}
+
+
+                    </tbody>
+
+
+                </table>
+
+
+            </div>
+
+
+            <!-- ==================================================
+                 INFORMATION NOTE
+                 ================================================== -->
+
+            <p
+                class="risk-note"
+                style="margin-top: 20px;"
+            >
+
+                Candidate proposals are kept separate from independent verification and human review.
+                The proposal source is recorded for each finding.
+
+            </p>
+
+
+        </article>
+
+
+    </section>
+
+
+</div>
+
+
+{% endblock %}
